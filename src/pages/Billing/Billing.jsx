@@ -1,16 +1,16 @@
 import { Box, Typography } from '@mui/material';
 
-const CustomerList = () => {
+const Billing = () => {
   return (
     <Box>
       <Typography variant="h4" sx={{ marginBottom: 2 }}>
-        Customers
+        Billing
       </Typography>
       <Typography variant="body1" color="textSecondary">
-        Customer management page
+        Billing management page
       </Typography>
     </Box>
   );
 };
 
-export default CustomerList;
+export default Billing;
