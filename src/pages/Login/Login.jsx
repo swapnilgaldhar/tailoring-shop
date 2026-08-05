@@ -20,7 +20,7 @@ const Login = () => {
 
   // Hardcoded credentials (will be replaced with API call later)
   const VALID_USERNAME = 'admin';
-  const VALID_PASSWORD = 'password123';
+  const VALID_PASSWORD = 'admin';
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -82,7 +82,7 @@ const Login = () => {
 
           {/* Title */}
           <Typography variant="h5" component="h1" sx={{ marginBottom: 1 }}>
-            Tailoring Shop ERP
+            Tailoring Shop
           </Typography>
 
           <Typography variant="body2" color="textSecondary" sx={{ marginBottom: 3 }}>
@@ -148,7 +148,7 @@ const Login = () => {
                 Username: <strong>admin</strong>
               </Typography>
               <Typography variant="caption" display="block" color="textSecondary">
-                Password: <strong>password123</strong>
+                Password: <strong>admin123</strong>
               </Typography>
             </Box>
           </Box>

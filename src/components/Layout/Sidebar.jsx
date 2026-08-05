@@ -11,7 +11,7 @@ import {
 
 import HomeIcon from "@mui/icons-material/Home";
 import PeopleIcon from "@mui/icons-material/People";
-import StraightenIcon from "@mui/icons-material/Straighten";
+import StraightenIcon from "@mui/icons-material/Straighten"; //measurements icon
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import InventoryIcon from "@mui/icons-material/Inventory";
@@ -105,7 +105,7 @@ const Sidebar = () => {
               fontWeight: "bold",
               fontSize: "16px"
             }}
-          >
+          > 
             Tailoring Shop
           </Typography>
         </Box>

@@ -30,7 +30,7 @@ const Header = ({ handleDrawerToggle }) => {
               fontWeight: "bold",
               fontSize: "16px"
             }}
-          >
+          > First Impression
             Tailoring Shop
           </Typography>
         </Box>
