@@ -360,6 +360,8 @@ const MeasurementPage = () => {
 
       setSelectedCustomer(customer);
       setSelectedMeasurement(measurement);
+      setFormData(buildFormFromCustomer(customer, measurement));
+      setFormMode(hasMeasurementRecord(measurement) ? 'edit' : 'create');
       setFeedback({ type: 'success', message: 'Customer loaded successfully.' });
       setActiveTab(1);
     } catch {
@@ -519,7 +521,9 @@ const MeasurementPage = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.customerId.trim()) {
+    const customerId = formData.customerId.trim() || String(selectedCustomer?.id ?? '').trim();
+
+    if (!customerId) {
       setFeedback({ type: 'error', message: 'Customer ID is required.' });
       return;
     }
@@ -527,10 +531,15 @@ const MeasurementPage = () => {
     setSaving(true);
     try {
       let customerForPayload = selectedCustomer;
+      const measurementFormData = {
+        ...formData,
+        customerId,
+        customerName: formData.customerName || selectedCustomer?.name || '',
+      };
 
-      if (!customerForPayload?.id && formData.customerId.trim()) {
+      if (!customerForPayload?.id) {
         try {
-          const customerResponse = await getCustomerById(formData.customerId.trim());
+          const customerResponse = await getCustomerById(customerId);
           customerForPayload = normalizeCustomer(customerResponse?.data);
           if (customerForPayload?.id) {
             setSelectedCustomer(customerForPayload);
@@ -540,12 +549,12 @@ const MeasurementPage = () => {
         }
       }
 
-      const mergedPayload = buildMeasurementPayload(formData, customerForPayload);
+      const mergedPayload = buildMeasurementPayload(measurementFormData, customerForPayload);
 
       if (activeFormMeasurementTab === 0) {
-        await createShirtMeasurement(buildShirtMeasurementPayload(formData, customerForPayload));
+        await createShirtMeasurement(buildShirtMeasurementPayload(measurementFormData, customerForPayload));
       } else {
-        await createPantMeasurement(buildPantMeasurementPayload(formData, customerForPayload));
+        await createPantMeasurement(buildPantMeasurementPayload(measurementFormData, customerForPayload));
       }
 
       setFeedback({
@@ -558,15 +567,15 @@ const MeasurementPage = () => {
 
       if (selectedCustomer?.id) {
         try {
-          await updateCustomer(formData.customerId, {
-            custName: selectedCustomer?.name || formData.customerName || '',
+          await updateCustomer(customerId, {
+            custName: selectedCustomer?.name || measurementFormData.customerName || '',
             custMobileNumber: selectedCustomer?.mobileNumber || '',
             custAddress: selectedCustomer?.address || '',
             shirtMeasurements: mergedPayload.shirtMeasurements,
             pantMeasurements: mergedPayload.pantMeasurements,
           });
 
-          const refreshedCustomerResponse = await getCustomerById(formData.customerId);
+          const refreshedCustomerResponse = await getCustomerById(customerId);
           const refreshedCustomer = normalizeCustomer(refreshedCustomerResponse?.data);
           setSelectedCustomer(refreshedCustomer);
           setCustomers((prev) =>
@@ -586,19 +595,19 @@ const MeasurementPage = () => {
         const base = previous ?? normalizeMeasurement();
         return {
           ...base,
-          id: previous?.id || formData.customerId,
+          id: previous?.id || customerId,
           measurementId: FIXED_MEASUREMENT_ID,
-          customerId: formData.customerId,
-          customerName: customerForPayload?.name || formData.customerName,
+          customerId,
+          customerName: customerForPayload?.name || measurementFormData.customerName,
           shirtMeasurements:
             activeFormMeasurementTab === 0
-              ? { ...formData.shirtMeasurements }
+              ? { ...measurementFormData.shirtMeasurements }
               : base.shirtMeasurements,
           pantMeasurements:
             activeFormMeasurementTab === 1
-              ? { ...formData.pantMeasurements }
+              ? { ...measurementFormData.pantMeasurements }
               : base.pantMeasurements,
-          notes: formData.notes,
+          notes: measurementFormData.notes,
         };
       });
     } catch (error) {
@@ -687,14 +696,13 @@ const MeasurementPage = () => {
                   <TableCell>ID</TableCell>
                   <TableCell>Name</TableCell>
                   <TableCell>Mobile</TableCell>
-                  <TableCell>Measurement Status</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {customers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5}>
+                    <TableCell colSpan={4}>
                       <Typography color="text.secondary">No customers found.</Typography>
                     </TableCell>
                   </TableRow>
@@ -704,14 +712,13 @@ const MeasurementPage = () => {
                       <TableCell>{customer.id}</TableCell>
                       <TableCell>{customer.name}</TableCell>
                       <TableCell>{customer.mobileNumber}</TableCell>
-                      <TableCell>{hasMeasurementValues(customer) ? 'Saved' : 'Not added yet'}</TableCell>
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          <Button size="small" onClick={() => {
+                           {/* <Button size="small" onClick={() => {
                             openCustomerDetails(customer, 0);
                           }}>
-                            View
-                          </Button>
+                            View 
+                          </Button> */}
                           <Button size="small" startIcon={<EditIcon />} onClick={() => beginEditingMeasurement(customer, 0)}>
                             Edit Shirt
                           </Button>
@@ -748,7 +755,7 @@ const MeasurementPage = () => {
                   <Typography><strong>Name:</strong> {selectedCustomer.name}</Typography>
                   <Typography><strong>Mobile:</strong> {selectedCustomer.mobileNumber}</Typography>
                   <Typography><strong>Address:</strong> {selectedCustomer.address}</Typography>
-                  <Typography><strong>Measurement status:</strong> {hasMeasurementValues(selectedMeasurementView || selectedCustomer) ? 'Saved' : 'Not added yet'}</Typography>
+                 <Typography><strong>Measurement status:</strong> {hasMeasurementValues(selectedMeasurementView || selectedCustomer) ? 'Saved' : 'Not added yet'}</Typography>
                   <Typography><strong>Measurement notes:</strong> {selectedMeasurementView?.notes || 'No notes added'}</Typography>
                   <Typography><strong>Delivery status:</strong> {getDeliverySummary(selectedCustomer).status}</Typography>
                   <Typography><strong>Delivery item:</strong> {getDeliverySummary(selectedCustomer).item}</Typography>

@@ -51,14 +51,7 @@ const requestWithFallback = async (method, paths, data) => {
   throw lastError;
 };
 
-export const createBill = (payload) =>
-  requestWithFallback('post', [
-    '/bill/create',
-    '/billing/create',
-    '/bills/create',
-    '/createbill',
-    '/bill/createbill',
-  ], payload);
+export const createBill = (payload) => requestWithFallback('post', '/billing/createbill', payload);
 
 export const getBills = () =>
   requestWithFallback('get', [
@@ -83,3 +76,13 @@ export const getBillsByCustomerId = (customerId) =>
     `/bills/customer/${customerId}`,
     `/getbillsbycustomer/${customerId}`,
   ]);
+
+export const getTodaysSales = () => requestWithFallback('get', '/report/todays/sales');
+
+export const getMonthlySales = () => requestWithFallback('get', '/report/monthly/sales');
+
+export const getTodaysDelivery = () => requestWithFallback('get', '/report/todays/delivery');
+
+export const getTodaysCollection = () => requestWithFallback('get', '/report/todays/collection');
+
+export const getCustomersWithBalanceCount = () => requestWithFallback('get', '/report/customers/withbalance');

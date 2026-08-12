@@ -1,161 +1,200 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Container,
   Box,
   TextField,
   Button,
   Typography,
-  Paper,
-  Alert
+  Alert,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
-import LockIcon from '@mui/icons-material/Lock';
+import ContentCutIcon from '@mui/icons-material/ContentCut';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+
+const VALID_USERNAME = 'admin';
+const VALID_PASSWORD = 'admin';
 
 const Login = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Hardcoded credentials (will be replaced with API call later)
-  const VALID_USERNAME = 'admin';
-  const VALID_PASSWORD = 'admin';
 
   const handleLogin = (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    // Simulate API call delay
     setTimeout(() => {
       if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-        // Store auth token or user info in localStorage if needed
         localStorage.setItem('authToken', 'dummy-token');
+        localStorage.setItem('authExpiry', String(Date.now() + 15 * 60 * 1000));
         localStorage.setItem('user', JSON.stringify({ username }));
-        
-        // Redirect to dashboard
         navigate('/dashboard');
       } else {
-        setError('Invalid username or password');
+        setError('Invalid username or password. Please try again.');
         setLoading(false);
       }
     }, 500);
   };
 
   return (
-    <Container component="main" maxWidth="xs">
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Left branding panel */}
       <Box
         sx={{
-          minHeight: '100vh',
+          display: { xs: 'none', md: 'flex' },
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '45%',
+          background: 'linear-gradient(145deg, #1565c0 0%, #1976d2 50%, #42a5f5 100%)',
+          color: 'white',
+          px: 6,
+          gap: 3,
+        }}
+      >
+        <Box
+          sx={{
+            width: 90,
+            height: 90,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            mb: 1,
+          }}
+        >
+          <ContentCutIcon sx={{ fontSize: 48 }} />
+        </Box>
+        <Typography variant="h4" sx={{ fontWeight: 800, textAlign: 'center', lineHeight: 1.2 }}>
+          First Impression<br />Tailoring Shop
+        </Typography>
+        <Typography sx={{ opacity: 0.85, textAlign: 'center', fontSize: 15, maxWidth: 300 }}>
+          Manage your customers, measurements, orders and billing — all in one place.
+        </Typography>
+        <Box sx={{ mt: 2, px: 3, py: 1.5, bgcolor: 'rgba(255,255,255,0.12)', borderRadius: 2 }}>
+          <Typography sx={{ fontSize: 13, opacity: 0.9, textAlign: 'center' }}>
+            Owner: <strong>Swapnil</strong>
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Right login panel */}
+      <Box
+        sx={{
+          flex: 1,
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          alignItems: 'center'
+          alignItems: 'center',
+          bgcolor: '#f4f7fb',
+          px: { xs: 3, sm: 6 },
         }}
       >
-        <Paper
-          elevation={3}
-          sx={{
-            padding: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            width: '100%'
-          }}
-        >
-          {/* Logo / Icon */}
-          <Box
-            sx={{
-              width: 60,
-              height: 60,
-              borderRadius: '50%',
-              backgroundColor: '#1976d2',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 2
-            }}
-          >
-            <LockIcon sx={{ color: 'white', fontSize: 32 }} />
+        <Box sx={{ width: '100%', maxWidth: 400 }}>
+          {/* Mobile logo */}
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1, mb: 3 }}>
+            <ContentCutIcon sx={{ color: '#1976d2', fontSize: 28 }} />
+            <Typography variant="h6" sx={{ fontWeight: 800, color: '#1976d2' }}>
+              Tailoring Shop
+            </Typography>
           </Box>
 
-          {/* Title */}
-          <Typography variant="h5" component="h1" sx={{ marginBottom: 1 }}>
-            Tailoring Shop
+          <Typography variant="h5" sx={{ fontWeight: 800, color: '#0f172a', mb: 0.5 }}>
+            Welcome back
+          </Typography>
+          <Typography sx={{ color: '#64748b', mb: 3.5, fontSize: 15 }}>
+            Sign in to continue to your dashboard
           </Typography>
 
-          <Typography variant="body2" color="textSecondary" sx={{ marginBottom: 3 }}>
-            Sign in to your account
-          </Typography>
-
-          {/* Error Alert */}
           {error && (
-            <Alert severity="error" sx={{ width: '100%', marginBottom: 2 }}>
+            <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }} onClose={() => setError('')}>
               {error}
             </Alert>
           )}
 
-          {/* Login Form */}
-          <Box component="form" onSubmit={handleLogin} sx={{ width: '100%' }}>
-            {/* Username Field */}
+          <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <TextField
-              margin="normal"
               required
               fullWidth
-              id="username"
               label="Username"
-              name="username"
               autoComplete="username"
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonOutlineIcon sx={{ color: '#94a3b8' }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ bgcolor: 'white', borderRadius: 2 }}
             />
 
-            {/* Password Field */}
             <TextField
-              margin="normal"
               required
               fullWidth
-              name="password"
               label="Password"
-              type="password"
-              id="password"
+              type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockOutlinedIcon sx={{ color: '#94a3b8' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword((v) => !v)} edge="end" size="small">
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ bgcolor: 'white', borderRadius: 2 }}
             />
 
-            {/* Login Button */}
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              sx={{ marginTop: 3, marginBottom: 2 }}
               disabled={loading}
+              sx={{
+                mt: 0.5,
+                py: 1.4,
+                fontWeight: 700,
+                fontSize: 16,
+                borderRadius: 2,
+                textTransform: 'none',
+                background: 'linear-gradient(90deg, #1565c0 0%, #1976d2 100%)',
+                boxShadow: '0 4px 14px rgba(25,118,210,0.35)',
+                '&:hover': { background: 'linear-gradient(90deg, #0d47a1 0%, #1565c0 100%)' },
+              }}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in…' : 'Sign In'}
             </Button>
-
-            {/* Demo Credentials Info */}
-            <Box sx={{ marginTop: 2, padding: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-              <Typography variant="caption" color="textSecondary">
-                <strong>Demo Credentials:</strong>
-              </Typography>
-              <Typography variant="caption" display="block" color="textSecondary">
-                Username: <strong>admin</strong>
-              </Typography>
-              <Typography variant="caption" display="block" color="textSecondary">
-                Password: <strong>admin123</strong>
-              </Typography>
-            </Box>
           </Box>
-        </Paper>
+
+          <Typography sx={{ mt: 4, color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
+            Session expires after 15 minutes of inactivity.
+          </Typography>
+        </Box>
       </Box>
-    </Container>
+    </Box>
   );
 };
 
 export default Login;
+ 

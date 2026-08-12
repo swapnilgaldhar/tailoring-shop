@@ -1,5 +1,5 @@
 
-
+import { useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -15,8 +15,36 @@ import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
 import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import AddIcon from "@mui/icons-material/Add";
+import { getCustomerCount } from "../../services/api";
+import { getTodaysDelivery } from "../../services/billingApi";
+import dashboardBackground from "../../assets/images/Dashboard baground.jpg";
+
+const toNumber = (value) => { const n = Number(value); return Number.isFinite(n) ? n : 0; };
 
 const Dashboard = () => {
+  const [todayCustomerCount, setTodayCustomerCount] = useState(0);
+  const [todayDelivery, setTodayDelivery] = useState(0);
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        const response = await getCustomerCount();
+        const count = response.data?.count ?? response.data?.data ?? response.data;
+        setTodayCustomerCount(Number.isFinite(Number(count)) ? Number(count) : 0);
+      } catch (error) {
+        console.error("Unable to load today's customer count.", error);
+      }
+      try {
+        const response = await getTodaysDelivery();
+        setTodayDelivery(toNumber(response?.data));
+      } catch (error) {
+        console.error("Unable to load today's delivery count.", error);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
+
   const cards = [
     {
       title: "Today's Sales",
@@ -27,7 +55,7 @@ const Dashboard = () => {
     },
     {
       title: "Today's Customers",
-      value: "18",
+      value: todayCustomerCount,
       icon: <PeopleAltOutlinedIcon />,
       bg: "#E3F2FD",
       color: "#1565C0",
@@ -41,7 +69,7 @@ const Dashboard = () => {
     },
     {
       title: "Today's Delivery",
-      value: "15",
+      value: todayDelivery,
       icon: <LocalShippingOutlinedIcon />,
       bg: "#FFF3E0",
       color: "#EF6C00",
@@ -49,7 +77,16 @@ const Dashboard = () => {
   ];
 
   return (
-    <Box sx={{ p: 3, backgroundColor: "#F8F6F2", minHeight: "100vh" }}>
+    <Box
+      sx={{
+        p: 3,
+        minHeight: "100vh",
+        backgroundImage: `url(${dashboardBackground})`,
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundSize: "cover",
+      }}
+    >
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
           <Typography variant="overline" sx={{ letterSpacing: 2, color: "#777" }}>

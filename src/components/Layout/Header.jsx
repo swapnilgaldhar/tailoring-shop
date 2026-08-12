@@ -3,10 +3,21 @@ import {
   Toolbar,
   Typography,
   Box,
+  Button,
 } from "@mui/material";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import LogoutIcon from "@mui/icons-material/Logout";
+import { useNavigate } from "react-router-dom";
 
 const Header = ({ handleDrawerToggle }) => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("authExpiry");
+    localStorage.removeItem("user");
+    navigate("/login", { replace: true });
+  };
 
   return (
     <AppBar
@@ -18,34 +29,43 @@ const Header = ({ handleDrawerToggle }) => {
         padding: "10px 0",
       }}
     >
-      <Toolbar sx={{ flexDirection: "column", alignItems: "flex-start", minHeight: "auto", gap: 1 }}>
-        
+      <Toolbar sx={{ flexDirection: "row", alignItems: "center", minHeight: "auto", gap: 1 }}>
+
         {/* Shop Logo and Name */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
           <LocalShippingIcon sx={{ color: "white", fontSize: "28px" }} />
-          <Typography
-            variant="h6"
-            sx={{ 
-              color: "white",
-              fontWeight: "bold",
-              fontSize: "16px"
-            }}
-          > First Impression
-            Tailoring Shop
-          </Typography>
+          <Box>
+            <Typography
+              variant="h6"
+              sx={{ color: "white", fontWeight: "bold", fontSize: "16px", lineHeight: 1.2 }}
+            >
+              First Impression Tailoring Shop
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: "rgba(255,255,255,0.8)", fontSize: "12px" }}
+            >
+              Owner: Swapnil
+            </Typography>
+          </Box>
         </Box>
 
-        {/* Owner Name */}
-        <Typography
-          variant="caption"
-          sx={{ 
-            color: "rgba(255,255,255,0.8)",
-            fontSize: "12px",
-            marginLeft: "36px"
+        {/* Logout */}
+        <Button
+          onClick={handleLogout}
+          startIcon={<LogoutIcon />}
+          sx={{
+            color: "white",
+            textTransform: "none",
+            fontWeight: 600,
+            borderRadius: 2,
+            px: 2,
+            bgcolor: "rgba(255,255,255,0.12)",
+            "&:hover": { bgcolor: "rgba(255,255,255,0.22)" },
           }}
         >
-          Owner: Swapnil
-        </Typography>
+          Logout
+        </Button>
 
       </Toolbar>
     </AppBar>

@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Divider,
   Grid,
   InputAdornment,
@@ -26,7 +25,8 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import EditIcon from '@mui/icons-material/Edit';
 import dayjs from 'dayjs';
 import { getCustomerById } from '../../services/api';
-import { createBill } from '../../services/billingApi';
+import { createBill, getBillById } from '../../services/billingApi';
+import PageTabs from '../../components/common/PageTabs';
 
 const ITEM_OPTIONS = [
   'Suiting',
@@ -39,24 +39,22 @@ const ITEM_OPTIONS = [
 ];
 
 const PAYMENT_TYPES = ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Credit'];
-const PAYMENT_STATUSES = ['Paid', 'Pending', 'Partial'];
 
 const createEmptyItem = () => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   item: 'Suiting',
   description: '',
   qty: '1',
-  unit: 'mtr',
+ // unit: 'mtr',
   price: '0',
 });
 
 const createInitialBillMeta = () => ({
-  billId: `BILL-${dayjs().format('YYYY')}-${String(Math.floor(Math.random() * 90000) + 10000)}`,
   billDate: dayjs().format('YYYY-MM-DD'),
   dueDate: dayjs().add(14, 'day').format('YYYY-MM-DD'),
   paymentType: 'Cash',
-  paymentStatus: 'Paid',
   discount: '0',
+  paidAmount: '0',
   notes: '',
 });
 
@@ -83,14 +81,224 @@ const normalizeCustomer = (customer = {}) => ({
   address: customer.address ?? customer.custAddress ?? customer.customerAddress ?? '',
 });
 
+const getFirstValue = (source, keys, fallback = '-') => {
+  const value = keys.map((key) => source?.[key]).find((candidate) => candidate != null && candidate !== '');
+  return value ?? fallback;
+};
+
+const BillDetailsCard = ({ bill, onPrint }) => {
+  const billItems = bill?.billItems ?? bill?.items ?? [];
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 2, md: 3 },
+        borderRadius: 2,
+        border: '1px solid #dbe6f5',
+        bgcolor: 'white',
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
+      }}
+    >
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ mb: 2.5 }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a' }}>
+            Bill #{getFirstValue(bill, ['billNumber', 'billNo', 'id'])}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Customer ID: {getFirstValue(bill, ['customerId', 'customer', 'custId'])}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography sx={{ fontWeight: 700, color: '#1d4ed8' }}>
+            {getFirstValue(bill, ['paymentMode', 'paymentType'])}
+          </Typography>
+          <Button size="small" variant="outlined" startIcon={<ReceiptLongIcon />} onClick={onPrint}>
+            Print Bill
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
+        {[
+          ['Bill Date', getFirstValue(bill, ['billDate'])],
+          ['Delivery Date', getFirstValue(bill, ['deliveryDate', 'dueDate'])],
+          ['Total Amount', `₹ ${formatCurrency(getFirstValue(bill, ['totalAmount'], 0))}`],
+          ['Discount', `₹ ${formatCurrency(getFirstValue(bill, ['discount'], 0))}`],
+          ['Paid Amount', `₹ ${formatCurrency(getFirstValue(bill, ['paidAmount'], 0))}`],
+          ['Balance Amount', `₹ ${formatCurrency(getFirstValue(bill, ['balanceAmount', 'remainingAmount'], 0))}`],
+        ].map(([label, value]) => (
+          <Grid item xs={12} sm={6} md={4} key={label}>
+            <Box
+              sx={{
+                minHeight: 82,
+                px: 2,
+                py: 1.5,
+                border: '1px solid #dbe6f5',
+                borderRadius: 1.5,
+                bgcolor: label === 'Balance Amount' ? '#fff7ed' : '#f8fbff',
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                {label}
+              </Typography>
+              <Typography
+                sx={{
+                  fontWeight: 800,
+                  color: label === 'Balance Amount' ? '#c2410c' : '#0f172a',
+                  fontSize: 17,
+                }}
+              >
+                {value}
+              </Typography>
+            </Box>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Divider sx={{ mb: 2 }} />
+      <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 700, color: '#1e3a8a' }}>
+        Bill Items
+      </Typography>
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: '#eef5ff' }}>
+              <TableCell sx={{ fontWeight: 700 }}>Sr. No.</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Item</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Description</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Qty</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Rate (₹)</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Amount (₹)</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {billItems.length ? (
+              billItems.map((item, index) => (
+                <TableRow key={item.id ?? item.billItemId ?? index}>
+                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{getFirstValue(item, ['itemName', 'item', 'name'])}</TableCell>
+                  <TableCell>{getFirstValue(item, ['itemDescription', 'description'])}</TableCell>
+                  <TableCell>{getFirstValue(item, ['quantity', 'qty'])}</TableCell>
+                  <TableCell>{formatCurrency(getFirstValue(item, ['rate', 'price', 'unitPrice'], 0))}</TableCell>
+                  <TableCell>{formatCurrency(getFirstValue(item, ['amount', 'totalAmount', 'total'], 0))}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary' }}>
+                  No bill items found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+          Notes
+        </Typography>
+        <Typography sx={{ color: '#0f172a', whiteSpace: 'pre-wrap' }}>
+          {getFirstValue(bill, ['notes'])}
+        </Typography>
+      </Box>
+    </Paper>
+  );
+};
+
+const ViewBillPrintTemplate = ({ bill }) => {
+  const billItems = bill?.billItems ?? bill?.items ?? [];
+
+  return (
+    <>
+      <div className="header">
+        <div>
+          <h1>Tailoring Shop</h1>
+          <p className="muted">Customer Invoice</p>
+        </div>
+        <div>
+          <p className="muted">Bill No: {getFirstValue(bill, ['billNumber', 'billNo', 'id'])}</p>
+          <p className="muted">Bill Date: {getFirstValue(bill, ['billDate'])}</p>
+          <p className="muted">Delivery Date: {getFirstValue(bill, ['deliveryDate', 'dueDate'])}</p>
+        </div>
+      </div>
+      <div className="card">
+        <h3>Customer Information</h3>
+        <p>
+          <strong>Customer ID:</strong> {getFirstValue(bill, ['customerId', 'customer', 'custId'])}
+        </p>
+        <p>
+          <strong>Payment Type:</strong> {getFirstValue(bill, ['paymentMode', 'paymentType'])}
+        </p>
+      </div>
+      <div className="card">
+        <h3>Bill Items</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Sr</th>
+              <th>Item</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {billItems.map((item, index) => (
+              <tr key={item.id ?? item.billItemId ?? index}>
+                <td>{index + 1}</td>
+                <td>{getFirstValue(item, ['itemName', 'item', 'name'])}</td>
+                <td>{getFirstValue(item, ['itemDescription', 'description'])}</td>
+                <td>{getFirstValue(item, ['quantity', 'qty'])}</td>
+                <td>₹ {formatCurrency(getFirstValue(item, ['rate', 'price', 'unitPrice'], 0))}</td>
+                <td>₹ {formatCurrency(getFirstValue(item, ['amount', 'totalAmount', 'total'], 0))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="totals">
+          <div>
+            <span>Discount</span>
+            <span>₹ {formatCurrency(getFirstValue(bill, ['discount'], 0))}</span>
+          </div>
+          <div className="grand">
+            <span>Total Amount</span>
+            <span>₹ {formatCurrency(getFirstValue(bill, ['totalAmount'], 0))}</span>
+          </div>
+          <div>
+            <span>Paid Amount</span>
+            <span>₹ {formatCurrency(getFirstValue(bill, ['paidAmount'], 0))}</span>
+          </div>
+          <div className="grand">
+            <span>Balance Amount</span>
+            <span>₹ {formatCurrency(getFirstValue(bill, ['balanceAmount', 'remainingAmount'], 0))}</span>
+          </div>
+        </div>
+      </div>
+      <div className="card">
+        <p>
+          <strong>Notes:</strong> {getFirstValue(bill, ['notes'])}
+        </p>
+      </div>
+    </>
+  );
+};
+
 const Billing = () => {
   const printRef = useRef(null);
+  const viewBillPrintRef = useRef(null);
+  const [activeTab, setActiveTab] = useState(0);
   const [customerLookupId, setCustomerLookupId] = useState('');
+  const [billNumberLookup, setBillNumberLookup] = useState('');
+  const [createdBillNumber, setCreatedBillNumber] = useState('');
+  const [loadedBill, setLoadedBill] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(true);
   const [billMeta, setBillMeta] = useState(createInitialBillMeta);
   const [items, setItems] = useState([createEmptyItem()]);
   const [loadingCustomer, setLoadingCustomer] = useState(false);
+  const [loadingBill, setLoadingBill] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
@@ -110,6 +318,8 @@ const Billing = () => {
 
   const discountAmount = Math.min(toNumber(billMeta.discount), subTotal);
   const totalAmount = Math.max(subTotal - discountAmount, 0);
+  const paidAmount = Math.min(toNumber(billMeta.paidAmount), totalAmount);
+  const remainingAmount = Math.max(totalAmount - paidAmount, 0);
 
   const handleBillMetaChange = (field) => (event) => {
     setBillMeta((prev) => ({
@@ -165,53 +375,60 @@ const Billing = () => {
     }
   };
 
+  const loadBill = async () => {
+    const billNumber = billNumberLookup.trim();
+    if (!billNumber) {
+      setFeedback({ type: 'error', message: 'Enter a bill number to view bill details.' });
+      return;
+    }
+
+    setLoadingBill(true);
+    try {
+      const response = await getBillById(billNumber);
+      if (!response?.data) {
+        setLoadedBill(null);
+        setFeedback({ type: 'error', message: 'No bill found for that bill number.' });
+        return;
+      }
+
+      setLoadedBill(response.data);
+      setFeedback(null);
+    } catch (error) {
+      setLoadedBill(null);
+      setFeedback({
+        type: 'error',
+        message: error?.response?.data?.message || 'Unable to load bill details for that bill number.',
+      });
+    } finally {
+      setLoadingBill(false);
+    }
+  };
+
   const buildBillPayload = () => {
-    const billItems = lineTotals.map((row, index) => ({
-      srNo: index + 1,
-      item: row.item,
+    const billItems = lineTotals.map((row) => ({
       itemName: row.item,
-      description: row.description,
-      qty: toNumber(row.qty),
-      quantity: toNumber(row.qty),
-      unit: row.unit,
-      price: toNumber(row.price),
-      unitPrice: toNumber(row.price),
-      total: row.total,
-      lineTotal: row.total,
+      itemDescription: row.description,
+      quantity: Math.trunc(toNumber(row.qty)),
+      rate: toNumber(row.price),
+      amount: row.total,
     }));
 
     return {
-      billId: billMeta.billId,
+      customerId: Number(customer?.id),
       billDate: billMeta.billDate,
-      dueDate: billMeta.dueDate,
-      paymentType: billMeta.paymentType,
-      paymentStatus: billMeta.paymentStatus,
+      deliveryDate: billMeta.dueDate,
+      paymentMode: billMeta.paymentType,
+      paidAmount,
       discount: discountAmount,
-      subTotal,
+      balanceAmount: remainingAmount,
       totalAmount,
-      notes: billMeta.notes,
-      customerId: customer?.id,
-      custId: customer?.id,
-      customerName: customer?.name,
-      customerMobile: customer?.mobileNumber,
-      customerAddress: customer?.address,
-      customer: customer
-        ? {
-            id: customer.id,
-            customerId: customer.id,
-            name: customer.name,
-            customerName: customer.name,
-            mobileNumber: customer.mobileNumber,
-            address: customer.address,
-          }
-        : undefined,
-      items: billItems,
+      notes: billMeta.notes.trim(),
       billItems,
     };
   };
 
-  const openPrintWindow = () => {
-    const printContents = printRef.current?.innerHTML;
+  const openPrintWindow = (targetRef = printRef) => {
+    const printContents = targetRef.current?.innerHTML;
     if (!printContents) return;
 
     const printWindow = window.open('', '_blank', 'width=900,height=700');
@@ -226,7 +443,7 @@ const Billing = () => {
     printWindow.document.write(`
       <html>
         <head>
-          <title>${billMeta.billId}</title>
+          <title>Customer Invoice</title>
           <style>
             body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
             h1, h2, h3, p { margin: 0 0 8px; }
@@ -256,25 +473,27 @@ const Billing = () => {
   };
 
   const handleGenerateBill = async () => {
-    if (!customer?.id) {
-      setFeedback({ type: 'error', message: 'Load a customer by ID before generating the bill.' });
+    if (!Number.isInteger(Number(customer?.id))) {
+      setFeedback({ type: 'error', message: 'Load a customer with a numeric customer ID before generating the bill.' });
       return;
     }
 
-    if (!items.some((row) => row.item && toNumber(row.qty) > 0 && toNumber(row.price) >= 0)) {
-      setFeedback({ type: 'error', message: 'Add at least one valid bill item.' });
+    if (!items.some((row) => row.item && Number.isInteger(toNumber(row.qty)) && toNumber(row.qty) > 0 && toNumber(row.price) >= 0)) {
+      setFeedback({ type: 'error', message: 'Add at least one bill item with a whole-number quantity.' });
       return;
     }
 
     setSaving(true);
     try {
       const payload = buildBillPayload();
-      await createBill(payload);
+      const response = await createBill(payload);
+      const billNumber = getFirstValue(response?.data, ['billNumber', 'billNo', 'id'], '');
+      setCreatedBillNumber(billNumber);
       setFeedback({
         type: 'success',
-        message: `Bill ${billMeta.billId} saved for customer ${customer.id} and ready to print.`,
+        message: `Bill saved for customer ${customer.id} and ready to print.`,
       });
-      openPrintWindow();
+      requestAnimationFrame(() => openPrintWindow());
     } catch (error) {
       setFeedback({
         type: 'error',
@@ -289,22 +508,18 @@ const Billing = () => {
   };
 
   const handleSaveDraft = async () => {
-    if (!customer?.id) {
-      setFeedback({ type: 'error', message: 'Load a customer by ID before saving draft.' });
+    if (!Number.isInteger(Number(customer?.id))) {
+      setFeedback({ type: 'error', message: 'Load a customer with a numeric customer ID before saving the bill.' });
       return;
     }
 
     setSaving(true);
     try {
-      const payload = {
-        ...buildBillPayload(),
-        paymentStatus: billMeta.paymentStatus || 'Pending',
-        draft: true,
-      };
+      const payload = buildBillPayload();
       await createBill(payload);
       setFeedback({
         type: 'success',
-        message: `Draft bill ${billMeta.billId} saved for customer ${customer.id}.`,
+        message: `Bill saved for customer ${customer.id}.`,
       });
     } catch (error) {
       setFeedback({
@@ -336,24 +551,75 @@ const Billing = () => {
         </Typography>
       </Stack>
 
+      <PageTabs
+        value={activeTab}
+        onChange={(_, nextTab) => setActiveTab(nextTab)}
+        tabs={[{ label: 'Create Bill' }, { label: 'View Bill' }]}
+        sx={{ mb: 2, borderBottom: '1px solid #dbe6f5' }}
+      />
+
       {feedback && (
         <Alert severity={feedback.type} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>
           {feedback.message}
         </Alert>
       )}
 
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={8}>
+      {activeTab === 1 ? (
+        <Stack spacing={2}>
           <Paper
             elevation={0}
             sx={{
-              p: 2.5,
-              borderRadius: 3,
+              p: { xs: 2, md: 2.5 },
+              borderRadius: 2,
               border: '1px solid #dbe6f5',
               bgcolor: 'white',
-              background: 'linear-gradient(180deg, #ffffff 0%, #f9fbff 100%)',
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
+            }}
+          >
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <TextField
+                size="small"
+                label="Bill Number"
+                value={billNumberLookup}
+                onChange={(event) => setBillNumberLookup(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') loadBill();
+                }}
+                sx={{ minWidth: { sm: 260 } }}
+              />
+              <Button variant="contained" onClick={loadBill} disabled={loadingBill}>
+                {loadingBill ? 'Loading...' : 'View Bill'}
+              </Button>
+            </Stack>
+          </Paper>
+          {loadedBill && (
+            <>
+              <BillDetailsCard bill={loadedBill} onPrint={() => openPrintWindow(viewBillPrintRef)} />
+              <Box ref={viewBillPrintRef} sx={{ display: 'none' }}>
+                <ViewBillPrintTemplate bill={loadedBill} />
+              </Box>
+            </>
+          )}
+        </Stack>
+      ) : (
+      <>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, md: 3 },
+          borderRadius: 2,
+          border: '1px solid #dbe6f5',
+          bgcolor: 'white',
+          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
+        }}
+      >
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={7}>
+          <Box
+            sx={{
               height: '100%',
+              p: { xs: 1.5, md: 2 },
+              border: '1px solid #e2e8f0',
+              borderRadius: 2,
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
@@ -379,14 +645,14 @@ const Billing = () => {
                   label="Customer ID"
                   value={customerLookupId}
                   onChange={(event) => setCustomerLookupId(event.target.value)}
-                  sx={{ minWidth: 220 }}
+                  sx={{ minWidth: { sm: 220 } }}
                 />
                 <Button variant="contained" onClick={loadCustomer} disabled={loadingCustomer}>
                   {loadingCustomer ? 'Loading...' : 'Load Customer'}
                 </Button>
               </Stack>
             ) : (
-              <Stack direction="row" spacing={2} alignItems="flex-start">
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
                 <Box
                   sx={{
                     width: 56,
@@ -402,60 +668,31 @@ const Billing = () => {
                 >
                   <PeopleIcon />
                 </Box>
-                <Stack spacing={1.2} sx={{ width: '100%' }}>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Typography sx={{ width: 140, color: '#64748b', fontWeight: 600, fontSize: 13 }}>
-                      Customer ID
-                    </Typography>
-                    <Typography sx={{ color: '#64748b', fontWeight: 600, fontSize: 13 }}>:</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
-                      {customer.id || '-'}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Typography sx={{ width: 140, color: '#64748b', fontWeight: 600, fontSize: 13 }}>
-                      Customer Name
-                    </Typography>
-                    <Typography sx={{ color: '#64748b', fontWeight: 600, fontSize: 13 }}>:</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
-                      {customer.name || '-'}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Typography sx={{ width: 140, color: '#64748b', fontWeight: 600, fontSize: 13 }}>
-                      Mobile Number
-                    </Typography>
-                    <Typography sx={{ color: '#64748b', fontWeight: 600, fontSize: 13 }}>:</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
-                      {customer.mobileNumber || '-'}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <Typography sx={{ width: 140, color: '#64748b', fontWeight: 600, fontSize: 13 }}>
-                      Address
-                    </Typography>
-                    <Typography sx={{ color: '#64748b', fontWeight: 600, fontSize: 13 }}>:</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
-                      {customer.address || '-'}
-                    </Typography>
-                  </Stack>
-                </Stack>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 1.5, rowGap: 0.75, width: '100%' }}>
+                  {[
+                    ['Customer ID', customer.id],
+                    ['Customer Name', customer.name],
+                    ['Mobile', customer.mobileNumber],
+                    ['Address', customer.address],
+                  ].map(([label, value]) => (
+                    <Box key={label} sx={{ display: 'contents' }}>
+                      <Typography sx={{ color: '#64748b', fontWeight: 600, fontSize: 13 }}>{label}</Typography>
+                      <Typography sx={{ fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>{value || '-'}</Typography>
+                    </Box>
+                  ))}
+                </Box>
               </Stack>
             )}
-          </Paper>
+          </Box>
         </Grid>
 
-        <Grid item xs={12} lg={4}>
-          <Paper
-            elevation={0}
+        <Grid item xs={12} md={5}>
+          <Box
             sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: '1px solid #dbe6f5',
-              bgcolor: 'white',
-              background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
               height: '100%',
+              p: { xs: 1.5, md: 2 },
+              border: '1px solid #e2e8f0',
+              borderRadius: 2,
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
@@ -465,14 +702,8 @@ const Billing = () => {
               </Typography>
             </Stack>
 
-            <Stack spacing={1.5}>
-              <TextField
-                size="small"
-                label="Bill ID"
-                value={billMeta.billId}
-                onChange={handleBillMetaChange('billId')}
-                fullWidth
-              />
+            <Grid container spacing={1.5}>
+              <Grid item xs={12} sm={6} md={12} lg={6}>
               <TextField
                 size="small"
                 type="date"
@@ -482,6 +713,8 @@ const Billing = () => {
                 InputLabelProps={{ shrink: true }}
                 fullWidth
               />
+              </Grid>
+              <Grid item xs={12} sm={6} md={12} lg={6}>
               <TextField
                 size="small"
                 type="date"
@@ -491,6 +724,8 @@ const Billing = () => {
                 InputLabelProps={{ shrink: true }}
                 fullWidth
               />
+              </Grid>
+              <Grid item xs={12}>
               <TextField
                 select
                 size="small"
@@ -505,58 +740,38 @@ const Billing = () => {
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField
-                select
-                size="small"
-                label="Payment Status"
-                value={billMeta.paymentStatus}
-                onChange={handleBillMetaChange('paymentStatus')}
-                fullWidth
-              >
-                {PAYMENT_STATUSES.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <Chip
-                size="small"
-                label={billMeta.paymentStatus}
-                color={
-                  billMeta.paymentStatus === 'Paid'
-                    ? 'success'
-                    : billMeta.paymentStatus === 'Pending'
-                      ? 'warning'
-                      : 'info'
-                }
-                sx={{ alignSelf: 'flex-start', fontWeight: 700, px: 0.5 }}
-              />
-            </Stack>
-          </Paper>
+              </Grid>
+            </Grid>
+          </Box>
         </Grid>
 
         <Grid item xs={12}>
-          <Paper
-            elevation={0}
+          <Box
             sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: '1px solid #dbe6f5',
-              bgcolor: 'white',
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
+              borderTop: '1px solid #e2e8f0',
+              pt: 3,
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" spacing={1.5} alignItems="center">
                 <ShoppingCartIcon sx={{ color: '#2563eb' }} />
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#1e3a8a' }}>
                   Bill Items
                 </Typography>
               </Stack>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleAddItem}
+                sx={{ textTransform: 'none', boxShadow: 'none' }}
+              >
+                Add Item
+              </Button>
             </Stack>
 
-            <TableContainer>
-              <Table size="small">
+            <TableContainer sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5 }}>
+              <Table size="small" sx={{ minWidth: 820 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: '#eef5ff' }}>
                     <TableCell sx={{ fontWeight: 700 }}>Sr. No.</TableCell>
@@ -565,27 +780,7 @@ const Billing = () => {
                     <TableCell sx={{ fontWeight: 700 }}>Qty</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Price (₹)</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Total (₹)</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }} align="center">
-                      <Stack spacing={0.5} alignItems="center">
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<AddIcon />}
-                          onClick={handleAddItem}
-                          sx={{
-                            textTransform: 'none',
-                            borderRadius: 2,
-                            boxShadow: 'none',
-                            bgcolor: '#1d4ed8',
-                          }}
-                        >
-                          Add Item
-                        </Button>
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#334155' }}>
-                          Action
-                        </Typography>
-                      </Stack>
-                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700 }} align="center">Action</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -623,15 +818,16 @@ const Billing = () => {
                             type="number"
                             value={row.qty}
                             onChange={handleItemChange(row.id, 'qty')}
-                            inputProps={{ min: 0, step: 0.01 }}
+                            inputProps={{ min: 1, step: 1 }}
                             sx={{ width: 90 }}
                           />
-                          <TextField
+                         {/* /* <TextField
                             size="small"
                             value={row.unit}
                             onChange={handleItemChange(row.id, 'unit')}
                             sx={{ width: 70 }}
                           />
+                         */ }
                         </Stack>
                       </TableCell>
                       <TableCell sx={{ minWidth: 120 }}>
@@ -643,6 +839,7 @@ const Billing = () => {
                           inputProps={{ min: 0, step: 0.01 }}
                           fullWidth
                         />
+                         
                       </TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>{formatCurrency(row.total)}</TableCell>
                       <TableCell align="center">
@@ -660,47 +857,16 @@ const Billing = () => {
                 </TableBody>
               </Table>
             </TableContainer>
-
-            <Stack spacing={1} sx={{ mt: 2.5, maxWidth: 320, ml: 'auto' }}>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography color="text.secondary">Sub Total</Typography>
-                <Typography sx={{ fontWeight: 700 }}>{formatCurrency(subTotal)}</Typography>
-              </Stack>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                <Typography color="text.secondary">Discount</Typography>
-                <TextField
-                  size="small"
-                  type="number"
-                  value={billMeta.discount}
-                  onChange={handleBillMetaChange('discount')}
-                  inputProps={{ min: 0, step: 0.01 }}
-                  sx={{ width: 120 }}
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
-                  }}
-                />
-              </Stack>
-              <Divider />
-              <Stack direction="row" justifyContent="space-between">
-                <Typography sx={{ fontWeight: 800 }}>Total Amount (₹)</Typography>
-                <Typography sx={{ fontWeight: 800, color: '#2563eb', fontSize: 20 }}>
-                  {formatCurrency(totalAmount)}
-                </Typography>
-              </Stack>
-            </Stack>
-          </Paper>
+          </Box>
         </Grid>
 
-        <Grid item xs={12} md={6}>
-          <Paper
-            elevation={0}
+        <Grid item xs={12} md={7}>
+          <Box
             sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: '1px solid #dbe6f5',
-              bgcolor: 'white',
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
               height: '100%',
+              p: { xs: 1.5, md: 2 },
+              border: '1px solid #e2e8f0',
+              borderRadius: 2,
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
@@ -719,25 +885,36 @@ const Billing = () => {
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               Thank you for your business!
             </Typography>
-          </Paper>
+          </Box>
         </Grid>
 
-        <Grid item xs={12} md={6}>
-          <Paper
-            elevation={0}
+        <Grid item xs={12} md={5}>
+          <Box
             sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: '1px solid #dbe6f5',
-              background: 'linear-gradient(135deg, #eef4ff 0%, #f8fbff 100%)',
-              boxShadow: '0 10px 26px rgba(37, 99, 235, 0.12)',
               height: '100%',
+              p: { xs: 1.5, md: 2 },
+              border: '1px solid #dbe6f5',
+              borderRadius: 2,
+              bgcolor: '#f8fbff',
             }}
           >
             <Stack spacing={1.5}>
-              <Typography variant="subtitle2" sx={{ color: '#1e3a8a', fontWeight: 700 }}>
-                Billing Actions
+              <Typography variant="subtitle1" sx={{ color: '#1e3a8a', fontWeight: 700 }}>
+                Bill Summary
               </Typography>
+              <Stack direction="row" justifyContent="space-between"><Typography color="text.secondary">Sub total</Typography><Typography fontWeight={700}>₹ {formatCurrency(subTotal)}</Typography></Stack>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                <Typography color="text.secondary">Discount</Typography>
+                <TextField size="small" type="number" value={billMeta.discount} onChange={handleBillMetaChange('discount')} inputProps={{ min: 0, step: 0.01 }} sx={{ width: 130 }} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
+              </Stack>
+              <Divider />
+              <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Total</Typography><Typography sx={{ fontWeight: 800, color: '#2563eb', fontSize: 20 }}>₹ {formatCurrency(totalAmount)}</Typography></Stack>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                <Typography color="text.secondary">Paid amount</Typography>
+                <TextField size="small" type="number" value={billMeta.paidAmount} onChange={handleBillMetaChange('paidAmount')} inputProps={{ min: 0, max: totalAmount, step: 0.01 }} sx={{ width: 130 }} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
+              </Stack>
+              <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Balance due</Typography><Typography sx={{ fontWeight: 800, color: '#dc2626', fontSize: 18 }}>₹ {formatCurrency(remainingAmount)}</Typography></Stack>
+              <Divider />
               <Button
                 variant="contained"
                 startIcon={<ReceiptLongIcon />}
@@ -745,16 +922,14 @@ const Billing = () => {
                 disabled={saving}
                 sx={{
                   minHeight: 46,
-                  borderRadius: 2.5,
                   fontWeight: 700,
                   textTransform: 'none',
-                  background: 'linear-gradient(90deg, #1d4ed8 0%, #2563eb 100%)',
                 }}
               >
                 {saving ? 'Saving...' : 'Generate Bill'}
               </Button>
 
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
+              <Stack direction="row" spacing={1.2}>
                 <Button
                   fullWidth
                   variant="outlined"
@@ -775,9 +950,10 @@ const Billing = () => {
                 </Button>
               </Stack>
             </Stack>
-          </Paper>
+          </Box>
         </Grid>
       </Grid>
+      </Paper>
 
       <Box ref={printRef} sx={{ display: 'none' }}>
         <div className="header">
@@ -786,7 +962,7 @@ const Billing = () => {
             <p className="muted">Customer Invoice</p>
           </div>
           <div>
-            <h3>{billMeta.billId}</h3>
+            <p className="muted">Bill No: {createdBillNumber || '-'}</p>
             <p className="muted">Date: {billMeta.billDate}</p>
             <p className="muted">Due: {billMeta.dueDate}</p>
           </div>
@@ -850,6 +1026,14 @@ const Billing = () => {
               <span>Total Amount</span>
               <span>₹ {formatCurrency(totalAmount)}</span>
             </div>
+            <div>
+              <span>Paid Amount</span>
+              <span>₹ {formatCurrency(paidAmount)}</span>
+            </div>
+            <div className="grand">
+              <span>Remaining Amount</span>
+              <span>₹ {formatCurrency(remainingAmount)}</span>
+            </div>
           </div>
         </div>
 
@@ -858,13 +1042,12 @@ const Billing = () => {
             <strong>Payment Type:</strong> {billMeta.paymentType}
           </p>
           <p>
-            <strong>Payment Status:</strong> {billMeta.paymentStatus}
-          </p>
-          <p>
             <strong>Notes:</strong> {billMeta.notes || 'Thank you for your business!'}
           </p>
         </div>
       </Box>
+      </>
+      )}
     </Box>
   );
 };

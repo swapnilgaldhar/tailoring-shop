@@ -49,6 +49,7 @@ const requestCustomerApis = async (method, path, data) => {
 };
 
 export const getCustomers = () => requestCustomerApis('get', '/getallcustomer');
+export const getCustomerCount = () => requestCustomerApis('get', '/getCustomerCount');
 export const getCustomerById = (id) => requestCustomerApis('get', `/getcustomer/${id}`);
 export const createCustomer = (customer) => requestCustomerApis('post', '/create', customer);
 export const updateCustomer = (id, customer) => requestCustomerApis('put', `/updatecustomer/${id}`, customer);

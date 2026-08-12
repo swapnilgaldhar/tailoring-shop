@@ -1,15 +1,16 @@
 import { Navigate } from "react-router-dom";
 
 const ProtectedRoute = ({ children }) => {
-  // Check if user is authenticated (authToken in localStorage)
-  const isAuthenticated = !!localStorage.getItem("authToken");
+  const token = localStorage.getItem("authToken");
+  const expiry = Number(localStorage.getItem("authExpiry") || 0);
+  const isAuthenticated = !!token && Date.now() < expiry;
 
   if (!isAuthenticated) {
-    //ticated Redirect to login if not authen
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("authExpiry");
     return <Navigate to="/login" replace />;
   }
 
-  // If authenticated, render the component
   return children;
 };
 
