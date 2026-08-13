@@ -23,6 +23,8 @@ import {
   getCustomers,
 } from '../../services/api';
 import {
+  getMeasurementById,
+  getMeasurements,
   getPantMeasurementById,
   getShirtMeasurementById,
 } from '../../services/measurementApi';
@@ -30,38 +32,83 @@ import AddCustomer from './AddCustomer';
 import CustomerView from './CustomerView';
 import PageTabs from '../../components/common/PageTabs';
 
-const normalizeCustomer = (customer = {}) => ({
-  ...customer,
-  id: customer.id ?? customer.custId ?? customer.customerId ?? '',
-  name: customer.name ?? customer.custName ?? customer.customerName ?? '',
-  mobileNumber: customer.mobileNumber ?? customer.custMobileNumber ?? customer.phone ?? customer.mobile ?? '',
-  address: customer.address ?? customer.custAddress ?? customer.customerAddress ?? '',
-  balance: customer.balance ?? customer.custBalance ?? customer.accountBalance ?? customer.outstandingBalance ?? '',
-  shirtMeasurements: customer.shirtMeasurements ?? {},
-  pantMeasurements: customer.pantMeasurements ?? {},
-  measurementNotes: customer.measurementNotes ?? { shirt: '', pant: '' },
-});
+const resolveMeasurementMap = (value, fallback = {}) => {
+  const extracted = unwrapMeasurementPayload(value ?? fallback);
+  if (!extracted || typeof extracted !== 'object' || Array.isArray(extracted)) {
+    return {};
+  }
+  return extracted;
+};
 
-const normalizeShirtMeasurements = (measurement = {}) => ({
-  length: measurement.length ?? measurement.shirtLength ?? '',
-  chest: measurement.chest ?? '',
-  waist: measurement.waist ?? '',
-  hip: measurement.shirtHip ?? measurement.hip ?? '',
-  shoulder: measurement.shoulder ?? '',
-  sleeve: measurement.sleeve ?? '',
-  neck: measurement.neck ?? measurement.collar ?? '',
-  cuff: measurement.cuff ?? '',
-});
+const readMeasurementObject = (value) => {
+  const normalized = parseJsonIfString(value ?? {});
 
-const normalizePantMeasurements = (measurement = {}) => ({
-  length: measurement.pantLength ?? measurement.length ?? '',
-  waist: measurement.pantWaist ?? measurement.waist ?? '',
-  hip: measurement.hip ?? '',
-  thigh: measurement.thigh ?? '',
-  knee: measurement.knee ?? '',
-  calf: measurement.calf ?? '',
-  bottom: measurement.bottom ?? '',
-});
+  if (Array.isArray(normalized)) {
+    return readMeasurementObject(normalized[0] ?? {});
+  }
+
+  if (!normalized || typeof normalized !== 'object') {
+    return {};
+  }
+
+  if (normalized.data !== undefined) return readMeasurementObject(normalized.data);
+  if (normalized.result !== undefined) return readMeasurementObject(normalized.result);
+  if (normalized.payload !== undefined) return readMeasurementObject(normalized.payload);
+
+  const inner =
+    normalized.shirtMeasurement ??
+    normalized.pantMeasurement ??
+    normalized.shirtMeasurements ??
+    normalized.pantMeasurements ??
+    normalized.measurement;
+
+  if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+    return { ...normalized, ...inner };
+  }
+
+  return normalized;
+};
+
+const normalizeCustomer = (customer = {}) => {
+  const safeCustomer = unwrapMeasurementPayload(customer);
+  const flatShirtFromCustomer = {
+    length: safeCustomer.length ?? safeCustomer.shirtLength ?? '',
+    chest: safeCustomer.chest ?? '',
+    waist: safeCustomer.waist ?? '',
+    hip: safeCustomer.shirtHip ?? safeCustomer.hip ?? '',
+    shoulder: safeCustomer.shoulder ?? '',
+    sleeve: safeCustomer.sleeve ?? '',
+    neck: safeCustomer.neck ?? safeCustomer.collar ?? '',
+    cuff: safeCustomer.cuff ?? '',
+  };
+  const flatPantFromCustomer = {
+    length: safeCustomer.pantLength ?? safeCustomer.length ?? '',
+    waist: safeCustomer.pantWaist ?? safeCustomer.waist ?? '',
+    hip: safeCustomer.hip ?? '',
+    thigh: safeCustomer.thigh ?? '',
+    knee: safeCustomer.knee ?? '',
+    calf: safeCustomer.calf ?? '',
+    bottom: safeCustomer.bottom ?? '',
+  };
+
+  return {
+    ...safeCustomer,
+    id: safeCustomer.id ?? safeCustomer.custId ?? safeCustomer.customerId ?? '',
+    name: safeCustomer.name ?? safeCustomer.custName ?? safeCustomer.customerName ?? '',
+    mobileNumber: safeCustomer.mobileNumber ?? safeCustomer.custMobileNumber ?? safeCustomer.phone ?? safeCustomer.mobile ?? '',
+    address: safeCustomer.address ?? safeCustomer.custAddress ?? safeCustomer.customerAddress ?? '',
+    balance: safeCustomer.balance ?? safeCustomer.custBalance ?? safeCustomer.accountBalance ?? safeCustomer.outstandingBalance ?? '',
+    shirtMeasurements: {
+      ...flatShirtFromCustomer,
+      ...resolveMeasurementMap(safeCustomer.shirtMeasurements ?? safeCustomer.shirtMeasurement ?? safeCustomer.measurements?.shirtMeasurements ?? safeCustomer.measurements?.shirtMeasurement ?? safeCustomer.measurement?.shirtMeasurements ?? safeCustomer.measurement?.shirtMeasurement ?? {}),
+    },
+    pantMeasurements: {
+      ...flatPantFromCustomer,
+      ...resolveMeasurementMap(safeCustomer.pantMeasurements ?? safeCustomer.pantMeasurement ?? safeCustomer.measurements?.pantMeasurements ?? safeCustomer.measurements?.pantMeasurement ?? safeCustomer.measurement?.pantMeasurements ?? safeCustomer.measurement?.pantMeasurement ?? {}),
+    },
+    measurementNotes: unwrapMeasurementPayload(safeCustomer.measurementNotes ?? { shirt: safeCustomer.notes ?? '', pant: safeCustomer.notes ?? '' }),
+  };
+};
 
 const parseJsonIfString = (payload) => {
   if (typeof payload !== 'string') return payload;
@@ -78,6 +125,73 @@ const parseJsonIfString = (payload) => {
   }
 };
 
+const unwrapMeasurementPayload = (payload = {}) => {
+  const normalized = parseJsonIfString(payload);
+
+  if (Array.isArray(normalized)) {
+    return normalized[0] ?? {};
+  }
+
+  if (!normalized || typeof normalized !== 'object') {
+    return {};
+  }
+
+  if (normalized.data !== undefined) return unwrapMeasurementPayload(normalized.data);
+  if (normalized.result !== undefined) return unwrapMeasurementPayload(normalized.result);
+  if (normalized.measurement !== undefined) return unwrapMeasurementPayload(normalized.measurement);
+
+  return normalized;
+};
+
+const normalizeShirtMeasurements = (measurement = {}) => {
+  const root = unwrapMeasurementPayload(measurement);
+  const nested = unwrapMeasurementPayload(
+    root.shirtMeasurements ??
+      root.shirtMeasurement ??
+      root.measurements?.shirtMeasurements ??
+      root.measurements?.shirtMeasurement ??
+      root.measurement?.shirtMeasurements ??
+      root.measurement?.shirtMeasurement ??
+      {}
+  );
+  const source = { ...root, ...nested };
+
+  return {
+    length: source.length ?? source.shirtLength ?? '',
+    chest: source.chest ?? '',
+    waist: source.waist ?? '',
+    hip: source.shirtHip ?? source.hip ?? '',
+    shoulder: source.shoulder ?? '',
+    sleeve: source.sleeve ?? '',
+    neck: source.neck ?? source.collar ?? '',
+    cuff: source.cuff ?? '',
+  };
+};
+
+const normalizePantMeasurements = (measurement = {}) => {
+  const root = unwrapMeasurementPayload(measurement);
+  const nested = unwrapMeasurementPayload(
+    root.pantMeasurements ??
+      root.pantMeasurement ??
+      root.measurements?.pantMeasurements ??
+      root.measurements?.pantMeasurement ??
+      root.measurement?.pantMeasurements ??
+      root.measurement?.pantMeasurement ??
+      {}
+  );
+  const source = { ...root, ...nested };
+
+  return {
+    length: source.pantLength ?? source.length ?? '',
+    waist: source.pantWaist ?? source.waist ?? '',
+    hip: source.hip ?? '',
+    thigh: source.thigh ?? '',
+    knee: source.knee ?? '',
+    calf: source.calf ?? '',
+    bottom: source.bottom ?? '',
+  };
+};
+
 const extractCustomersList = (payload) => {
   const normalizedPayload = parseJsonIfString(payload);
 
@@ -91,6 +205,33 @@ const extractCustomersList = (payload) => {
     if (Array.isArray(normalizedPayload.list)) return normalizedPayload.list;
   }
   return [];
+};
+
+const extractMeasurementRecords = (payload) => {
+  const normalizedPayload = parseJsonIfString(payload);
+
+  if (Array.isArray(normalizedPayload)) return normalizedPayload;
+  if (normalizedPayload && typeof normalizedPayload === 'object') {
+    if (Array.isArray(normalizedPayload.measurements)) return normalizedPayload.measurements;
+    if (Array.isArray(normalizedPayload.data)) return normalizedPayload.data;
+    if (Array.isArray(normalizedPayload.content)) return normalizedPayload.content;
+    if (Array.isArray(normalizedPayload.items)) return normalizedPayload.items;
+    if (Array.isArray(normalizedPayload.results)) return normalizedPayload.results;
+    if (Array.isArray(normalizedPayload.list)) return normalizedPayload.list;
+  }
+  return [];
+};
+
+const stripEmptyValues = (values = {}) => {
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return {};
+
+  return Object.entries(values).reduce((accumulator, [key, value]) => {
+    if (value === null || value === undefined || value === '') {
+      return accumulator;
+    }
+    accumulator[key] = value;
+    return accumulator;
+  }, {});
 };
 
 const getViewModeIndex = (mode) => {
@@ -113,28 +254,61 @@ const  CustomerList = () => {
   const getCustomerWithMeasurements = async (customerId) => {
     const response = await getCustomerById(customerId);
     const baseCustomer = normalizeCustomer(response?.data);
+    const lookupId = baseCustomer?.id || customerId;
 
-    const [shirtResult, pantResult] = await Promise.allSettled([
-      getShirtMeasurementById(customerId),
-      getPantMeasurementById(customerId),
+    const [shirtResult, pantResult, genericResult, allMeasurementsResult] = await Promise.allSettled([
+      getShirtMeasurementById(lookupId),
+      getPantMeasurementById(lookupId),
+      getMeasurementById(lookupId),
+      getMeasurements(),
     ]);
 
-    const shirtData = shirtResult.status === 'fulfilled' ? shirtResult.value?.data ?? {} : {};
-    const pantData = pantResult.status === 'fulfilled' ? pantResult.value?.data ?? {} : {};
+    const genericData = readMeasurementObject(genericResult.status === 'fulfilled' ? genericResult.value?.data : {});
+    const shirtData = readMeasurementObject(shirtResult.status === 'fulfilled' ? shirtResult.value?.data : {});
+    const pantData = readMeasurementObject(pantResult.status === 'fulfilled' ? pantResult.value?.data : {});
+    const allMeasurements =
+      allMeasurementsResult.status === 'fulfilled'
+        ? extractMeasurementRecords(allMeasurementsResult.value?.data)
+        : [];
+    const measurementFromList =
+      allMeasurements.find((item) => {
+        const record = readMeasurementObject(item);
+        const recordCustomerId =
+          record.customerId ?? record.custId ?? record.customer?.id ?? record.customer?.customerId;
+        return String(recordCustomerId ?? '') === String(lookupId);
+      }) ?? {};
+    const listData = readMeasurementObject(measurementFromList);
+
+    const unifiedShirt = {
+      ...stripEmptyValues(listData),
+      ...stripEmptyValues(genericData),
+      ...stripEmptyValues(readMeasurementObject(listData.shirtMeasurements ?? listData.shirtMeasurement ?? listData.measurements?.shirtMeasurements ?? listData.measurements?.shirtMeasurement)),
+      ...stripEmptyValues(readMeasurementObject(genericData.shirtMeasurements ?? genericData.shirtMeasurement ?? genericData.measurements?.shirtMeasurements ?? genericData.measurements?.shirtMeasurement)),
+      ...stripEmptyValues(readMeasurementObject(shirtData.shirtMeasurements ?? shirtData.shirtMeasurement ?? shirtData.measurements?.shirtMeasurements ?? shirtData.measurements?.shirtMeasurement)),
+      ...stripEmptyValues(shirtData),
+    };
+    const unifiedPant = {
+      ...stripEmptyValues(listData),
+      ...stripEmptyValues(genericData),
+      ...stripEmptyValues(readMeasurementObject(listData.pantMeasurements ?? listData.pantMeasurement ?? listData.measurements?.pantMeasurements ?? listData.measurements?.pantMeasurement)),
+      ...stripEmptyValues(readMeasurementObject(genericData.pantMeasurements ?? genericData.pantMeasurement ?? genericData.measurements?.pantMeasurements ?? genericData.measurements?.pantMeasurement)),
+      ...stripEmptyValues(readMeasurementObject(pantData.pantMeasurements ?? pantData.pantMeasurement ?? pantData.measurements?.pantMeasurements ?? pantData.measurements?.pantMeasurement)),
+      ...stripEmptyValues(pantData),
+    };
 
     return normalizeCustomer({
       ...baseCustomer,
       shirtMeasurements: {
         ...baseCustomer.shirtMeasurements,
-        ...normalizeShirtMeasurements(shirtData),
+        ...normalizeShirtMeasurements(unifiedShirt),
       },
       pantMeasurements: {
         ...baseCustomer.pantMeasurements,
-        ...normalizePantMeasurements(pantData),
+        ...normalizePantMeasurements(unifiedPant),
       },
       measurementNotes: {
-        shirt: shirtData.notes ?? baseCustomer.measurementNotes?.shirt ?? '',
-        pant: pantData.notes ?? baseCustomer.measurementNotes?.pant ?? '',
+        shirt: unifiedShirt.notes ?? baseCustomer.measurementNotes?.shirt ?? '',
+        pant: unifiedPant.notes ?? baseCustomer.measurementNotes?.pant ?? '',
       },
     });
   };

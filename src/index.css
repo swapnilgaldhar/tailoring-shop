@@ -1,3 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;700&display=swap');
+
+:root {
+  font-family: Inter, "Noto Sans Devanagari", sans-serif;
+}
+
 html {
   font-size: 18px;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: Inter, "Noto Sans Devanagari", sans-serif;
 }

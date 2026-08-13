@@ -116,7 +116,7 @@ const Sidebar = () => {
             fontSize: "12px"
           }}
         >
-          Owner: Swapnil
+          Owner: Mr. Rajendra Galdhar
         </Typography>
       </Box>
 

@@ -10,36 +10,53 @@ const rawMeasurementApiBaseUrl =
   customerApiBaseUrl.replace('/api/customer', '');
 const measurementApiBaseUrl = rawMeasurementApiBaseUrl.replace(/\/+$/, '');
 
-const api = axios.create({
-  baseURL: measurementApiBaseUrl,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const toHostRoot = (baseUrl) => {
+  const clean = (baseUrl || '').replace(/\/+$/, '');
+  if (!clean) return '';
+  return clean.replace(/\/api(?:\/customer)?$/, '');
+};
 
-export const getMeasurements = () => api.get('/getallmeasurements');
-export const getMeasurementById = (id) => api.get(`/getmeasurement/${id}`);
+const measurementBaseCandidates = [
+  measurementApiBaseUrl,
+  toHostRoot(measurementApiBaseUrl),
+  toHostRoot(customerApiBaseUrl),
+  'http://localhost:8091',
+  '/api',
+].filter((value, index, array) => value && array.indexOf(value) === index);
 
-export const getShirtMeasurementById = (id) => api.get(`/measurement/get/shirt/measurement/${id}`);
-export const getPantMeasurementById = (id) => api.get(`/measurement/get/pant/measurement/${id}`);
+const measurementApis = measurementBaseCandidates.map((baseURL) =>
+  axios.create({
+    baseURL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  }),
+);
 
-const measurementCreatePaths = [
-  '/measurement/create/measurement',
-  '/createmeasurement',
-  '/create',
-];
-
-export const createMeasurement = async (measurement) => {
+const requestMeasurementPaths = async (method, paths, data) => {
+  const requestPaths = Array.isArray(paths) ? paths : [paths];
   let lastError = null;
 
-  for (const path of measurementCreatePaths) {
-    try {
-      return await api.post(path, measurement);
-    } catch (error) {
-      lastError = error;
+  for (const client of measurementApis) {
+    for (const path of requestPaths) {
+      try {
+        const response = await client.request({
+          method,
+          url: path,
+          data,
+        });
 
-      if (error?.response && error.response.status !== 404) {
-        throw error;
+        // Ignore accidental SPA HTML fallback responses from wrong base/path combos.
+        if (typeof response?.data === 'string') {
+          const body = response.data.trim().toLowerCase();
+          if (body.startsWith('<!doctype html') || body.startsWith('<html')) {
+            continue;
+          }
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
       }
     }
   }
@@ -47,11 +64,69 @@ export const createMeasurement = async (measurement) => {
   throw lastError;
 };
 
+export const getMeasurements = () =>
+  requestMeasurementPaths('get', [
+    '/getallmeasurements',
+    '/measurement/getallmeasurements',
+    '/get/all/measurements',
+  ]);
+export const getMeasurementById = (id) =>
+  requestMeasurementPaths('get', [
+    `/measurement/get/measurement/${id}`,
+    `/getmeasurement/${id}`,
+    `/get/measurement/${id}`,
+    `/measurement/${id}`,
+  ]);
+
+export const getShirtMeasurementById = (id) =>
+  requestMeasurementPaths('get', [
+    `/measurement/get/shirt/measurement/${id}`,
+    `/get/shirt/measurement/${id}`,
+    `/shirt/measurement/${id}`,
+    `/get/shirt/${id}`,
+  ]);
+
+export const getPantMeasurementById = (id) =>
+  requestMeasurementPaths('get', [
+    `/measurement/get/pant/measurement/${id}`,
+    `/get/pant/measurement/${id}`,
+    `/pant/measurement/${id}`,
+    `/get/pant/${id}`,
+  ]);
+
+const measurementCreatePaths = [
+  '/measurement/create/measurement',
+  '/createmeasurement',
+  '/create',
+  '/create/measurement',
+];
+
+export const createMeasurement = async (measurement) => {
+  return requestMeasurementPaths('post', measurementCreatePaths, measurement);
+};
+
 export const createShirtMeasurement = (measurement) =>
-  api.post('/measurement/create/shirt/measurement', measurement);
+  requestMeasurementPaths('post', [
+    '/measurement/create/shirt/measurement',
+    '/create/shirt/measurement',
+    '/shirt/measurement/create',
+  ], measurement);
 
 export const createPantMeasurement = (measurement) =>
-  api.post('/measurement/create/pant/measurement', measurement);
+  requestMeasurementPaths('post', [
+    '/measurement/create/pant/measurement',
+    '/create/pant/measurement',
+    '/pant/measurement/create',
+  ], measurement);
 
-export const updateMeasurement = (id, measurement) => api.put(`/updatemeasurement/${id}`, measurement);
-export const deleteMeasurement = (id) => api.delete(`/deletemeasurement/${id}`);
+export const updateMeasurement = (id, measurement) =>
+  requestMeasurementPaths('put', [
+    `/updatemeasurement/${id}`,
+    `/measurement/update/${id}`,
+  ], measurement);
+
+export const deleteMeasurement = (id) =>
+  requestMeasurementPaths('delete', [
+    `/deletemeasurement/${id}`,
+    `/measurement/delete/${id}`,
+  ]);
