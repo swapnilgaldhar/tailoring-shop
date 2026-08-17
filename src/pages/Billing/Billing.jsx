@@ -23,6 +23,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import EditIcon from '@mui/icons-material/Edit';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import dayjs from 'dayjs';
 import { getCustomerById } from '../../services/api';
 import { createBill, getBillById } from '../../services/billingApi';
@@ -69,6 +70,21 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const normalizePhoneForWhatsApp = (phone = '') => {
+  const digits = String(phone).replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (digits.length === 10) {
+    return `91${digits}`;
+  }
+
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits;
+  }
+
+  return digits;
+};
+
 const normalizeCustomer = (customer = {}) => ({
   id: customer.id ?? customer.customerId ?? customer.custId ?? '',
   name: customer.name ?? customer.customerName ?? customer.custName ?? '',
@@ -84,6 +100,149 @@ const normalizeCustomer = (customer = {}) => ({
 const getFirstValue = (source, keys, fallback = '-') => {
   const value = keys.map((key) => source?.[key]).find((candidate) => candidate != null && candidate !== '');
   return value ?? fallback;
+};
+
+const blobFromCanvas = (canvas) =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+      reject(new Error('Unable to generate receipt image.'));
+    }, 'image/png');
+  });
+
+const downloadBlobFile = (blob, fileName) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+const drawRoundedRect = (ctx, x, y, width, height, radius, fillStyle) => {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+};
+
+const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
+  const items = payload?.billItems ?? [];
+  const canvasWidth = 1080;
+  const rowHeight = 54;
+  const cardBaseHeight = 740;
+  const cardHeight = cardBaseHeight + items.length * rowHeight;
+  const canvasHeight = cardHeight + 120;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    throw new Error('Canvas rendering is not supported in this browser.');
+  }
+
+  const gradient = ctx.createLinearGradient(0, 0, canvasWidth, canvasHeight);
+  gradient.addColorStop(0, '#eaf4ff');
+  gradient.addColorStop(1, '#f7fbff');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  drawRoundedRect(ctx, 60, 40, canvasWidth - 120, cardHeight, 34, '#ffffff');
+
+  ctx.fillStyle = '#1d4ed8';
+  ctx.font = '700 42px Arial';
+  ctx.fillText('Tailoring Shop', 110, 120);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '500 24px Arial';
+  ctx.fillText('Bill Receipt', 110, 158);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 24px Arial';
+  ctx.fillText(`Bill No: ${billNumber || '-'}`, 690, 120);
+  ctx.fillText(`Date: ${payload.billDate || '-'}`, 690, 156);
+
+  ctx.strokeStyle = '#dbe6f5';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(100, 190);
+  ctx.lineTo(canvasWidth - 100, 190);
+  ctx.stroke();
+
+  ctx.fillStyle = '#334155';
+  ctx.font = '600 22px Arial';
+  ctx.fillText(`Customer: ${customer?.name || '-'}`, 110, 242);
+  ctx.fillText(`Mobile: ${customer?.mobileNumber || '-'}`, 110, 278);
+  ctx.fillText(`Payment: ${payload.paymentMode || '-'}`, 110, 314);
+
+  const totalsX = 690;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 22px Arial';
+  ctx.fillText(`Total: Rs ${formatCurrency(payload.totalAmount || 0)}`, totalsX, 242);
+  ctx.fillText(`Paid: Rs ${formatCurrency(payload.paidAmount || 0)}`, totalsX, 278);
+  ctx.fillStyle = '#dc2626';
+  ctx.fillText(`Balance: Rs ${formatCurrency(payload.balanceAmount || 0)}`, totalsX, 314);
+
+  const tableTop = 360;
+  drawRoundedRect(ctx, 100, tableTop, canvasWidth - 200, 56, 12, '#eef5ff');
+  ctx.fillStyle = '#1e3a8a';
+  ctx.font = '700 20px Arial';
+  ctx.fillText('Item', 130, tableTop + 35);
+  ctx.fillText('Qty', 560, tableTop + 35);
+  ctx.fillText('Rate', 680, tableTop + 35);
+  ctx.fillText('Amount', 820, tableTop + 35);
+
+  let rowY = tableTop + 84;
+  ctx.font = '500 20px Arial';
+  items.forEach((item) => {
+    ctx.fillStyle = '#0f172a';
+    const name = item.itemName || '-';
+    const clippedName = name.length > 28 ? `${name.slice(0, 28)}...` : name;
+    ctx.fillText(clippedName, 130, rowY);
+    ctx.fillText(String(item.quantity ?? '-'), 560, rowY);
+    ctx.fillText(formatCurrency(item.rate ?? 0), 680, rowY);
+    ctx.fillText(formatCurrency(item.amount ?? 0), 820, rowY);
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(120, rowY + 18);
+    ctx.lineTo(canvasWidth - 120, rowY + 18);
+    ctx.stroke();
+
+    rowY += rowHeight;
+  });
+
+  const notesTop = Math.max(rowY + 24, tableTop + 100);
+  drawRoundedRect(ctx, 100, notesTop, canvasWidth - 200, 120, 14, '#f8fbff');
+  ctx.fillStyle = '#334155';
+  ctx.font = '700 20px Arial';
+  ctx.fillText('Notes', 126, notesTop + 34);
+  ctx.font = '500 19px Arial';
+  const notes = payload.notes || 'Thank you for your business!';
+  const clippedNotes = notes.length > 110 ? `${notes.slice(0, 110)}...` : notes;
+  ctx.fillText(clippedNotes, 126, notesTop + 72);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '500 18px Arial';
+  ctx.fillText('Generated from Tailoring Shop Billing', 110, canvasHeight - 28);
+
+  return blobFromCanvas(canvas);
 };
 
 const BillDetailsCard = ({ bill, onPrint }) => {
@@ -427,6 +586,35 @@ const Billing = () => {
     };
   };
 
+  const buildWhatsAppBillMessage = ({ billNumber, payload }) => {
+    const itemLines = (payload.billItems || []).map(
+      (item, index) =>
+        `${index + 1}. ${item.itemName} x${item.quantity} - Rs ${formatCurrency(item.amount)}`,
+    );
+
+    const customerName = customer?.name || 'Customer';
+    const lines = [
+      `Hello ${customerName},`,
+      '',
+      `Your bill has been generated from Tailoring Shop.`,
+      `Bill No: ${billNumber || '-'}`,
+      `Bill Date: ${payload.billDate}`,
+      `Delivery Date: ${payload.deliveryDate}`,
+      '',
+      'Items:',
+      ...itemLines,
+      '',
+      `Total: Rs ${formatCurrency(payload.totalAmount)}`,
+      `Paid: Rs ${formatCurrency(payload.paidAmount)}`,
+      `Balance: Rs ${formatCurrency(payload.balanceAmount)}`,
+      '',
+      `Payment Type: ${payload.paymentMode}`,
+      `Notes: ${payload.notes || 'Thank you for your business!'}`,
+    ];
+
+    return lines.join('\n');
+  };
+
   const openPrintWindow = (targetRef = printRef) => {
     const printContents = targetRef.current?.innerHTML;
     if (!printContents) return;
@@ -472,26 +660,40 @@ const Billing = () => {
     printWindow.document.close();
   };
 
-  const handleGenerateBill = async () => {
+  const validateBillBeforeSave = () => {
     if (!Number.isInteger(Number(customer?.id))) {
-      setFeedback({ type: 'error', message: 'Load a customer with a numeric customer ID before generating the bill.' });
-      return;
+      setFeedback({ type: 'error', message: 'Load a customer with a numeric customer ID before saving the bill.' });
+      return false;
     }
 
     if (!items.some((row) => row.item && Number.isInteger(toNumber(row.qty)) && toNumber(row.qty) > 0 && toNumber(row.price) >= 0)) {
       setFeedback({ type: 'error', message: 'Add at least one bill item with a whole-number quantity.' });
+      return false;
+    }
+
+    return true;
+  };
+
+  const saveBillToDb = async () => {
+    const payload = buildBillPayload();
+    const response = await createBill(payload);
+    const billNumber = getFirstValue(response?.data, ['billNumber', 'billNo', 'id'], '');
+    setCreatedBillNumber(billNumber);
+
+    return { payload, billNumber };
+  };
+
+  const handlePrintBill = async () => {
+    if (!validateBillBeforeSave()) {
       return;
     }
 
     setSaving(true);
     try {
-      const payload = buildBillPayload();
-      const response = await createBill(payload);
-      const billNumber = getFirstValue(response?.data, ['billNumber', 'billNo', 'id'], '');
-      setCreatedBillNumber(billNumber);
+      await saveBillToDb();
       setFeedback({
         type: 'success',
-        message: `Bill saved for customer ${customer.id} and ready to print.`,
+        message: `Bill saved for customer ${customer.id} and opened for print.`,
       });
       requestAnimationFrame(() => openPrintWindow());
     } catch (error) {
@@ -507,24 +709,63 @@ const Billing = () => {
     }
   };
 
-  const handleSaveDraft = async () => {
-    if (!Number.isInteger(Number(customer?.id))) {
-      setFeedback({ type: 'error', message: 'Load a customer with a numeric customer ID before saving the bill.' });
+  const handleShareOnWhatsApp = async () => {
+    if (!validateBillBeforeSave()) {
+      return;
+    }
+
+    const whatsappNumber = normalizePhoneForWhatsApp(customer?.mobileNumber);
+    if (!whatsappNumber) {
+      setFeedback({ type: 'error', message: 'Customer mobile number is required to share bill on WhatsApp.' });
       return;
     }
 
     setSaving(true);
     try {
-      const payload = buildBillPayload();
-      await createBill(payload);
+      const { payload, billNumber } = await saveBillToDb();
+      const receiptBlob = await buildBillReceiptPng({ billNumber, payload, customer });
+      const receiptFileName = `bill-${billNumber || Date.now()}.png`;
+      const receiptFile = new File([receiptBlob], receiptFileName, { type: 'image/png' });
+      const message = buildWhatsAppBillMessage({ billNumber, payload });
+
+      if (navigator.share && navigator.canShare?.({ files: [receiptFile] })) {
+        await navigator.share({
+          title: `Bill ${billNumber || ''}`,
+          text: message,
+          files: [receiptFile],
+        });
+        setFeedback({
+          type: 'success',
+          message: `Bill saved and shared as PNG for customer ${customer.id}.`,
+        });
+        return;
+      }
+
+      // Fallback for desktop browsers where direct file share is not supported.
+      downloadBlobFile(receiptBlob, receiptFileName);
+      const fallbackText = `${message}\n\nBill PNG downloaded. Please attach it in WhatsApp.`;
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(fallbackText)}`;
+      const shareWindow = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      if (!shareWindow) {
+        setFeedback({
+          type: 'warning',
+          message: 'Bill saved and PNG downloaded. WhatsApp window was blocked; please open WhatsApp and attach the downloaded PNG manually.',
+        });
+        return;
+      }
+
       setFeedback({
         type: 'success',
-        message: `Bill saved for customer ${customer.id}.`,
+        message: `Bill saved. PNG downloaded and WhatsApp opened for customer ${customer.id}.`,
       });
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        setFeedback({ type: 'info', message: 'Share cancelled.' });
+        return;
+      }
       setFeedback({
         type: 'error',
-        message: error?.response?.data?.message || 'Unable to save draft bill.',
+        message: error?.response?.data?.message || error?.message || 'Unable to save and share bill as PNG on WhatsApp.',
       });
     } finally {
       setSaving(false);
@@ -915,39 +1156,30 @@ const Billing = () => {
               </Stack>
               <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Balance due</Typography><Typography sx={{ fontWeight: 800, color: '#dc2626', fontSize: 18 }}>₹ {formatCurrency(remainingAmount)}</Typography></Stack>
               <Divider />
-              <Button
-                variant="contained"
-                startIcon={<ReceiptLongIcon />}
-                onClick={handleGenerateBill}
-                disabled={saving}
-                sx={{
-                  minHeight: 46,
-                  fontWeight: 700,
-                  textTransform: 'none',
-                }}
-              >
-                {saving ? 'Saving...' : 'Generate Bill'}
-              </Button>
-
               <Stack direction="row" spacing={1.2}>
                 <Button
                   fullWidth
                   variant="outlined"
-                  onClick={openPrintWindow}
-                  disabled={!customer}
-                  sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none' }}
-                >
-                  Print Bill
-                </Button>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={handleSaveDraft}
+                  onClick={handlePrintBill}
                   disabled={saving}
                   sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none' }}
                 >
-                  Save Draft
+                  {saving ? 'Saving...' : 'Print Bill'}
                 </Button>
+                <Button
+                  variant="outlined"
+                  onClick={handleShareOnWhatsApp}
+                  disabled={saving}
+                  aria-label="Share on WhatsApp"
+                  sx={{
+                    borderRadius: 2,
+                    minWidth: 44,
+                    width: 44,
+                    height: 40,
+                    px: 0,
+                  }}
+                  startIcon={<WhatsAppIcon />}
+                />
               </Stack>
             </Stack>
           </Box>
