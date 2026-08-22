@@ -3,6 +3,10 @@ import {
   Alert,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   Paper,
@@ -21,6 +25,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import {
   getCustomerById,
   getCustomers,
+  getCustomersWithBalance,
+  updateCustomerBalence,
 } from '../../services/api';
 import {
   getMeasurementById,
@@ -238,7 +244,9 @@ const getViewModeIndex = (mode) => {
   if (mode === 'create') return 0;
   if (mode === 'view') return 1;
   if (mode === 'detail') return 2;
-  return 3;
+  if (mode === 'all') return 3;
+  if (mode === 'withBalance') return 4;
+  return 0;
 };
 
 const  CustomerList = () => {
@@ -249,6 +257,12 @@ const  CustomerList = () => {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [page, setPage] = useState(1);
+  const [balanceCustomers, setBalanceCustomers] = useState([]);
+  const [balancePage, setBalancePage] = useState(1);
+  const [balanceDialogOpen, setBalanceDialogOpen] = useState(false);
+  const [balanceCustomer, setBalanceCustomer] = useState(null);
+  const [balanceAmount, setBalanceAmount] = useState('');
+  const [updatingBalance, setUpdatingBalance] = useState(false);
   const rowsPerPage = 20;
 
   const getCustomerWithMeasurements = async (customerId) => {
@@ -329,6 +343,22 @@ const  CustomerList = () => {
     }
   };
 
+  const loadCustomersWithBalance = async () => {
+    setLoading(true);
+    try {
+      const response = await getCustomersWithBalance();
+      const data = extractCustomersList(response?.data);
+      setBalanceCustomers(data.map(normalizeCustomer));
+    } catch {
+      setFeedback({
+        type: 'error',
+        message: 'Unable to load customers with balance from the backend.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSelectForEdit = (customer) => {
     const normalizedCustomer = normalizeCustomer(customer);
     setSelectedCustomer(normalizedCustomer);
@@ -385,8 +415,65 @@ const  CustomerList = () => {
     }
   };
 
+  const handleOpenBalanceDialog = (customer) => {
+    const normalizedCustomer = normalizeCustomer(customer);
+    setBalanceCustomer(normalizedCustomer);
+    setBalanceAmount('');
+    setBalanceDialogOpen(true);
+  };
+
+  const handleCloseBalanceDialog = () => {
+    if (updatingBalance) return;
+    setBalanceDialogOpen(false);
+    setBalanceCustomer(null);
+    setBalanceAmount('');
+  };
+
+  const handleSubmitBalanceUpdate = async () => {
+    const customerId = balanceCustomer?.id;
+    const amountValue = balanceAmount.trim();
+
+    if (!customerId) {
+      setFeedback({ type: 'error', message: 'Customer ID is missing for balance update.' });
+      return;
+    }
+
+    if (amountValue === '' || Number.isNaN(Number(amountValue))) {
+      setFeedback({ type: 'error', message: 'Please enter a valid amount.' });
+      return;
+    }
+
+    setUpdatingBalance(true);
+    try {
+      await updateCustomerBalence(customerId, Number(amountValue));
+      setFeedback({
+        type: 'success',
+        message: `Balence update sucessfully for customerid ${customerId}.`,
+      });
+      setBalanceDialogOpen(false);
+      setBalanceCustomer(null);
+      setBalanceAmount('');
+      await loadCustomersWithBalance();
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error?.response?.data?.message || 'Unable to update customer balence.',
+      });
+    } finally {
+      setUpdatingBalance(false);
+    }
+  };
+
   const handleTabChange = async (_, value) => {
-    const mode = value === 0 ? 'create' : value === 1 ? 'view' : value === 2 ? 'detail' : 'all';
+    const mode = value === 0
+      ? 'create'
+      : value === 1
+        ? 'view'
+        : value === 2
+          ? 'detail'
+          : value === 3
+            ? 'all'
+            : 'withBalance';
     setViewMode(mode);
 
     if (mode === 'all') {
@@ -394,10 +481,18 @@ const  CustomerList = () => {
       setFeedback(null);
       await loadCustomers();
     }
+
+    if (mode === 'withBalance') {
+      setBalancePage(1);
+      setFeedback(null);
+      await loadCustomersWithBalance();
+    }
   };
 
   const pagedCustomers = customers.slice((page - 1) * rowsPerPage, page * rowsPerPage);
   const totalPages = Math.max(1, Math.ceil(customers.length / rowsPerPage));
+  const pagedBalanceCustomers = balanceCustomers.slice((balancePage - 1) * rowsPerPage, balancePage * rowsPerPage);
+  const totalBalancePages = Math.max(1, Math.ceil(balanceCustomers.length / rowsPerPage));
 
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: 3, width: '100%' }}>
@@ -422,6 +517,7 @@ const  CustomerList = () => {
             { label: 'View Customer' },
             { label: 'Customer Details' },
             { label: 'View All Customers' },
+            { label: 'With Balance > 0' },
           ]}
         />
       </Stack>
@@ -432,8 +528,8 @@ const  CustomerList = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3} sx={{ width: '100%', maxWidth: viewMode === 'detail' ? 1600 : viewMode === 'all' ? 1400 : 1200, mx: 'auto' }}>
-        {viewMode !== 'all' && (
+      <Grid container spacing={3} sx={{ width: '100%', maxWidth: viewMode === 'detail' ? 1600 : viewMode === 'all' || viewMode === 'withBalance' ? 1400 : 1200, mx: 'auto' }}>
+        {viewMode !== 'all' && viewMode !== 'withBalance' && (
         <Grid item xs={12} md={viewMode === 'detail' ? 12 : 4} sx={{ width: '100%' }}>
           <Paper
             sx={{
@@ -567,7 +663,101 @@ const  CustomerList = () => {
             </Paper>
           </Grid>
         )}
+
+        {viewMode === 'withBalance' && (
+          <Grid item xs={12} sx={{ width: '100%' }}>
+            <Paper sx={{ p: 3, width: '100%', mx: 'auto' }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Customers With Balance &gt; 0
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              {loading ? (
+                <Typography color="text.secondary">Loading customers...</Typography>
+              ) : balanceCustomers.length === 0 ? (
+                <Typography color="text.secondary">No customers with outstanding balance found.</Typography>
+              ) : (
+                <>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>ID</TableCell>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Mobile</TableCell>
+                        <TableCell>Balance</TableCell>
+                        <TableCell>Address</TableCell>
+                        {<TableCell align="right">Actions</TableCell>}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {pagedBalanceCustomers.map((customer) => (
+                        <TableRow key={customer.id} hover>
+                          <TableCell>{customer.id}</TableCell>
+                          <TableCell>{customer.name}</TableCell>
+                          <TableCell>{customer.mobileNumber}</TableCell>
+                          <TableCell>{customer.balance != null && customer.balance !== '' ? customer.balance : '-'}</TableCell>
+                          <TableCell>{customer.address}</TableCell>
+                          <TableCell align="right">
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Button size="small" startIcon={<EditIcon />} onClick={() => handleOpenBalanceDialog(customer)}>
+                                Update Balence
+                              </Button>
+                              {/*
+                              <Button size="small" startIcon={<VisibilityIcon />} onClick={() => handleSelectForView(customer)}>
+                                View
+                              </Button> */}
+                            </Stack> 
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Page {balancePage} of {totalBalancePages}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button size="small" variant="outlined" disabled={balancePage === 1} onClick={() => setBalancePage((prev) => Math.max(1, prev - 1))}>
+                        Previous
+                      </Button>
+                      <Button size="small" variant="outlined" disabled={balancePage === totalBalancePages} onClick={() => setBalancePage((prev) => Math.min(totalBalancePages, prev + 1))}>
+                        Next
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </>
+              )}
+            </Paper>
+          </Grid>
+        )}
       </Grid>
+
+      <Dialog open={balanceDialogOpen} onClose={handleCloseBalanceDialog} fullWidth maxWidth="xs">
+        <DialogTitle>Update Balence</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Customer ID"
+              value={balanceCustomer?.id || ''}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+            <TextField
+              label="Amount"
+              type="number"
+              value={balanceAmount}
+              onChange={(event) => setBalanceAmount(event.target.value)}
+              fullWidth
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseBalanceDialog} disabled={updatingBalance}>Cancel</Button>
+          <Button variant="contained" onClick={handleSubmitBalanceUpdate} disabled={updatingBalance}>
+            {updatingBalance ? 'Updating...' : 'Submit'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

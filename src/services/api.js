@@ -49,10 +49,16 @@ const requestCustomerApis = async (method, paths, data) => {
 };
 
 export const getCustomers = () => requestCustomerApis('get', ['/getallcustomer', '/getallcustomers', '/customers', '/all']);
+export const getCustomersWithBalance = () => requestCustomerApis('get', ['/getcustomer/withbalance', '/getCustomer/withbalance', '/customers/withbalance']);
 export const getCustomerCount = () => requestCustomerApis('get', ['/getCustomerCount', '/customercount', '/count']);
 export const getCustomerById = (id) => requestCustomerApis('get', [`/getcustomer/${id}`, `/customer/${id}`, `/getCustomer/${id}`, `/customers/${id}`, `/get/customer/${id}`]);
 export const createCustomer = (customer) => requestCustomerApis('post', ['/create', '/createcustomer', '/customers'], customer);
 export const updateCustomer = (id, customer) => requestCustomerApis('put', [`/updatecustomer/${id}`, `/customer/${id}`, `/customers/${id}`], customer);
+export const updateCustomerBalence = (id, amount) =>
+  requestCustomerApis('put', [
+    `/update/balence/${id}/${amount}`,
+    `/update/balance/${id}/${amount}`,
+  ]);
 export const deleteCustomer = (id) => requestCustomerApis('delete', [`/deletecustomer/${id}`, `/customer/${id}`, `/customers/${id}`]);
 
 export const getMeasurements = () => requestCustomerApis('get', ['/getallmeasurements', '/getallmeasurement', '/measurements', '/allmeasurements']);

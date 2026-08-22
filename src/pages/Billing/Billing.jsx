@@ -102,6 +102,31 @@ const getFirstValue = (source, keys, fallback = '-') => {
   return value ?? fallback;
 };
 
+const extractBillNumberFromResponse = (responseData) => {
+  const candidateSources = [
+    responseData,
+    responseData?.data,
+    responseData?.result,
+    responseData?.payload,
+    responseData?.bill,
+    responseData?.billDetails,
+  ];
+
+  for (const source of candidateSources) {
+    if (!source || typeof source !== 'object') continue;
+    const value = getFirstValue(
+      source,
+      ['billNumber', 'billNo', 'billnumber', 'bill_no', 'billId', 'invoiceNumber', 'invoiceNo', 'id'],
+      '',
+    );
+    if (value !== '' && value !== '-') {
+      return String(value);
+    }
+  }
+
+  return '';
+};
+
 const blobFromCanvas = (canvas) =>
   new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -677,7 +702,7 @@ const Billing = () => {
   const saveBillToDb = async () => {
     const payload = buildBillPayload();
     const response = await createBill(payload);
-    const billNumber = getFirstValue(response?.data, ['billNumber', 'billNo', 'id'], '');
+    const billNumber = extractBillNumberFromResponse(response?.data);
     setCreatedBillNumber(billNumber);
 
     return { payload, billNumber };
@@ -690,12 +715,22 @@ const Billing = () => {
 
     setSaving(true);
     try {
-      await saveBillToDb();
+      const { billNumber } = await saveBillToDb();
       setFeedback({
         type: 'success',
         message: `Bill saved for customer ${customer.id} and opened for print.`,
       });
-      requestAnimationFrame(() => openPrintWindow());
+      // Wait for the hidden print template to re-render with the latest bill number.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => openPrintWindow());
+      });
+
+      if (!billNumber) {
+        setFeedback({
+          type: 'warning',
+          message: 'Bill saved, but bill number was not returned by API response. Invoice shows "-" until backend includes bill number field.',
+        });
+      }
     } catch (error) {
       setFeedback({
         type: 'error',
