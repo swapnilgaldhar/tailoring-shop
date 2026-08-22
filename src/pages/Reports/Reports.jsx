@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Box, Button, Card, CardContent, Stack, Typography,
+  Alert, Box, Button, Card, CardContent, Stack, TextField, Typography,
 } from '@mui/material';
 import AttachMoneyOutlinedIcon from '@mui/icons-material/AttachMoneyOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
@@ -14,7 +14,7 @@ import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
 import WalletOutlinedIcon from '@mui/icons-material/WalletOutlined';
 import dayjs from 'dayjs';
 import { getCustomerCount, getCustomers } from '../../services/api';
-import { getBills, getCustomersWithBalanceCount, getMonthlySales, getTodaysCollection, getTodaysDelivery, getTodaysSales } from '../../services/billingApi';
+import { getBills, getCustomersWithBalanceCount, getDeliveryByDate, getMonthlySales, getTodaysCollection, getTodaysDelivery, getTodaysSales } from '../../services/billingApi';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
@@ -85,6 +85,7 @@ const MetricCard = ({ title, value, caption, icon, accent, background, change })
 
 const Reports = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [deliveryCheckDate, setDeliveryCheckDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [customers, setCustomers] = useState([]);
   const [todayCustomerCount, setTodayCustomerCount] = useState(0);
   const [bills, setBills] = useState([]);
@@ -93,6 +94,7 @@ const Reports = () => {
   const [todayDelivery, setTodayDelivery] = useState(0);
   const [todayCollection, setTodayCollection] = useState(0);
   const [customersWithBalanceCount, setCustomersWithBalanceCount] = useState(0);
+  const [selectedDateDeliveryCount, setSelectedDateDeliveryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const reportDate = dayjs(selectedDate);
@@ -130,6 +132,28 @@ const Reports = () => {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadSelectedDateDelivery = async () => {
+      try {
+        const result = await getDeliveryByDate(deliveryCheckDate);
+        if (!active) return;
+        const count = result?.data?.count ?? result?.data?.data ?? result?.data;
+        setSelectedDateDeliveryCount(toNumber(count));
+      } catch {
+        if (!active) return;
+        setSelectedDateDeliveryCount(0);
+      }
+    };
+
+    loadSelectedDateDelivery();
+
+    return () => {
+      active = false;
+    };
+  }, [deliveryCheckDate]);
+
   const report = useMemo(() => {
     const sum = (list) => list.reduce((total, item) => total + item.amount, 0);
     const todayBills = bills.filter((bill) => onDate(bill.billDate, reportDate));
@@ -162,6 +186,7 @@ const Reports = () => {
     { title: 'New Customers', value: todayCustomerCount, caption: 'today', icon: <GroupsOutlinedIcon fontSize="small" />, accent: '#2563eb', background: '#dbeafe' },
     { title: "Today's Collection", value: currency.format(todayCollection), caption: 'today', icon: <WalletOutlinedIcon fontSize="small" />, accent: '#d97706', background: '#ffedd5' },
     { title: "Today's Delivery", value: todayDelivery, caption: 'today', icon: <LocalShippingOutlinedIcon fontSize="small" />, accent: '#9333ea', background: '#f3e8ff' },
+    { title: 'Delivery On Selected Date', value: selectedDateDeliveryCount, caption: dayjs(deliveryCheckDate).format('DD MMM YYYY'), icon: <CalendarMonthOutlinedIcon fontSize="small" />, accent: '#0f766e', background: '#ccfbf1' },
     { title: 'Monthly Sales', value: currency.format(monthlySales), caption: 'this month', icon: <ReceiptLongOutlinedIcon fontSize="small" />, accent: '#e11d48', background: '#ffe4e6' },
     { title: 'Month Orders', value: report.monthOrders, caption: 'bills created this month', icon: <Inventory2OutlinedIcon fontSize="small" />, accent: '#0891b2', background: '#cffafe' },
     { title: 'Pending Orders', value: report.pendingBills.length, caption: 'requires attention', icon: <PendingActionsOutlinedIcon fontSize="small" />, accent: '#d97706', background: '#fef3c7' },
@@ -177,6 +202,21 @@ const Reports = () => {
           <Button variant="contained" startIcon={<DownloadOutlinedIcon />} onClick={handleExport} sx={{ textTransform: 'none', bgcolor: '#1266d8', boxShadow: 'none', '&:hover': { bgcolor: '#0e55b4' } }}>Export</Button>
         </Stack>
       </Stack>
+      <Card elevation={0} sx={{ border: '1px solid #e7edf5', borderRadius: 2, p: 2, mb: 2.5, bgcolor: '#f8fafc' }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
+          <Typography sx={{ color: '#334155', fontWeight: 700, minWidth: { sm: 210 } }}>
+            Check Deliveries By Date
+          </Typography>
+          <TextField
+            size="small"
+            type="date"
+            value={deliveryCheckDate}
+            onChange={(event) => setDeliveryCheckDate(event.target.value)}
+            inputProps={{ max: dayjs().format('YYYY-MM-DD') }}
+            sx={{ width: { xs: '100%', sm: 220 }, bgcolor: 'white' }}
+          />
+        </Stack>
+      </Card>
       {error ? <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert> : null}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }, gap: 3 }}>
         {metrics.map((metric) => <MetricCard key={metric.title} {...metric} />)}

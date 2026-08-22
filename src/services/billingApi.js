@@ -86,3 +86,9 @@ export const getTodaysDelivery = () => requestWithFallback('get', '/report/today
 export const getTodaysCollection = () => requestWithFallback('get', '/report/todays/collection');
 
 export const getCustomersWithBalanceCount = () => requestWithFallback('get', '/report/customers/withbalance');
+
+export const getDeliveryByDate = (date) =>
+  requestWithFallback('get', [
+    `/report/delivery/${date}`,
+    `/delivery/${date}`,
+  ]);
