@@ -36,6 +36,8 @@ const ITEM_OPTIONS = [
   'Shirt Stitching',
   'Blazer',
   'Alteration',
+  'Sherwani',
+  'Safari',
   'Other',
 ];
 
