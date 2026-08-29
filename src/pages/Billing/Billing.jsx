@@ -3,6 +3,10 @@ import {
   Alert,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   InputAdornment,
@@ -21,6 +25,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import PrintIcon from '@mui/icons-material/Print';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import EditIcon from '@mui/icons-material/Edit';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
@@ -34,7 +39,9 @@ const ITEM_OPTIONS = [
   'Shirting',
   'Pant Stitching',
   'Shirt Stitching',
-  'Blazer',
+  'Blazer Stitching',
+  'Jacket Stitching',
+  'Sherwani Stitching',
   'Alteration',
   'Other',
 ];
@@ -102,29 +109,58 @@ const getFirstValue = (source, keys, fallback = '-') => {
   return value ?? fallback;
 };
 
-const extractBillNumberFromResponse = (responseData) => {
-  const candidateSources = [
-    responseData,
-    responseData?.data,
-    responseData?.result,
-    responseData?.payload,
-    responseData?.bill,
-    responseData?.billDetails,
-  ];
-
-  for (const source of candidateSources) {
-    if (!source || typeof source !== 'object') continue;
-    const value = getFirstValue(
-      source,
-      ['billNumber', 'billNo', 'billnumber', 'bill_no', 'billId', 'invoiceNumber', 'invoiceNo', 'id'],
-      '',
-    );
-    if (value !== '' && value !== '-') {
-      return String(value);
+const extractBillNumberFromResponse = (responseData, responseHeaders = {}) => {
+  let normalizedResponse = responseData;
+  if (typeof normalizedResponse === 'string') {
+    try {
+      normalizedResponse = JSON.parse(normalizedResponse);
+    } catch {
+      const plainTextBillNumber = normalizedResponse.trim();
+      return /^\d+$/.test(plainTextBillNumber) ? plainTextBillNumber : '';
     }
   }
 
-  return '';
+  const billNumberKeys = [
+    'billNumber',
+    'billNo',
+    'billnumber',
+    'bill_number',
+    'billId',
+    'invoiceNumber',
+    'invoiceNo',
+  ];
+  const primitiveWrapperKeys = ['data', 'result', 'payload', 'bill', 'billDetails', 'invoice'];
+
+  const findBillNumber = (value, allowPrimitive = false) => {
+    if (value == null) return '';
+    if (typeof value !== 'object') return allowPrimitive ? String(value) : '';
+    if (Array.isArray(value)) {
+      return value.map((item) => findBillNumber(item, true)).find(Boolean) || '';
+    }
+
+    const directValue = getFirstValue(value, billNumberKeys, '');
+    if (directValue !== '' && directValue !== '-') return String(directValue);
+
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const matchingKey = billNumberKeys.find((billKey) => billKey.toLowerCase() === key.toLowerCase());
+        if (matchingKey && item != null && item !== '') return String(item);
+        return findBillNumber(item, primitiveWrapperKeys.includes(key));
+      })
+      .find(Boolean) || '';
+  };
+
+  const billNumber = findBillNumber(normalizedResponse, true);
+  if (billNumber) return billNumber;
+
+  const location = responseHeaders.location || responseHeaders.Location || '';
+  const locationMatch = String(location).match(/(?:bill|invoice)[^/]*\/([^/?#]+)/i);
+  if (locationMatch?.[1]) return decodeURIComponent(locationMatch[1]);
+
+  // Some APIs return the created bill as an object with only an id.
+  return normalizedResponse && typeof normalizedResponse === 'object' && !Array.isArray(normalizedResponse)
+    ? String(normalizedResponse.id ?? '')
+    : '';
 };
 
 const blobFromCanvas = (canvas) =>
@@ -475,7 +511,8 @@ const Billing = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [customerLookupId, setCustomerLookupId] = useState('');
   const [billNumberLookup, setBillNumberLookup] = useState('');
-  const [createdBillNumber, setCreatedBillNumber] = useState('');
+  const [generatedBill, setGeneratedBill] = useState(null);
+  const [generatedCustomer, setGeneratedCustomer] = useState(null);
   const [loadedBill, setLoadedBill] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(true);
@@ -500,7 +537,8 @@ const Billing = () => {
     [lineTotals],
   );
 
-  const discountAmount = Math.min(toNumber(billMeta.discount), subTotal);
+  const discountPercent = Math.min(Math.max(toNumber(billMeta.discount), 0), 100);
+  const discountAmount = (subTotal * discountPercent) / 100;
   const totalAmount = Math.max(subTotal - discountAmount, 0);
   const paidAmount = Math.min(toNumber(billMeta.paidAmount), totalAmount);
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
@@ -603,6 +641,8 @@ const Billing = () => {
       deliveryDate: billMeta.dueDate,
       paymentMode: billMeta.paymentType,
       paidAmount,
+      discountAmount,
+      discountPer: discountPercent,
       discount: discountAmount,
       balanceAmount: remainingAmount,
       totalAmount,
@@ -611,13 +651,13 @@ const Billing = () => {
     };
   };
 
-  const buildWhatsAppBillMessage = ({ billNumber, payload }) => {
+  const buildWhatsAppBillMessage = ({ billNumber, payload, billCustomer = customer }) => {
     const itemLines = (payload.billItems || []).map(
       (item, index) =>
         `${index + 1}. ${item.itemName} x${item.quantity} - Rs ${formatCurrency(item.amount)}`,
     );
 
-    const customerName = customer?.name || 'Customer';
+    const customerName = billCustomer?.name || 'Customer';
     const lines = [
       `Hello ${customerName},`,
       '',
@@ -702,54 +742,43 @@ const Billing = () => {
   const saveBillToDb = async () => {
     const payload = buildBillPayload();
     const response = await createBill(payload);
-    const billNumber = extractBillNumberFromResponse(response?.data);
-    setCreatedBillNumber(billNumber);
-
+    const billNumber = extractBillNumberFromResponse(response?.data, response?.headers);
     return { payload, billNumber };
   };
 
-  const handlePrintBill = async () => {
-    if (!validateBillBeforeSave()) {
-      return;
-    }
+  const handleGenerateBill = async () => {
+    if (!validateBillBeforeSave()) return;
 
     setSaving(true);
     try {
-      const { billNumber } = await saveBillToDb();
-      setFeedback({
-        type: 'success',
-        message: `Bill saved for customer ${customer.id} and opened for print.`,
-      });
-      // Wait for the hidden print template to re-render with the latest bill number.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => openPrintWindow());
-      });
-
-      if (!billNumber) {
-        setFeedback({
-          type: 'warning',
-          message: 'Bill saved, but bill number was not returned by API response. Invoice shows "-" until backend includes bill number field.',
-        });
-      }
+      const { payload, billNumber } = await saveBillToDb();
+      setGeneratedBill({ ...payload, billNumber, customer: customer?.name });
+      setGeneratedCustomer(customer);
+      setCustomer(null);
+      setCustomerLookupId('');
+      setIsEditingCustomer(true);
+      setBillMeta(createInitialBillMeta());
+      setItems([createEmptyItem()]);
+      setFeedback({ type: 'success', message: 'Bill saved successfully.' });
     } catch (error) {
       setFeedback({
         type: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Unable to save bill. Please verify billing API endpoint is available.',
+        message: error?.response?.data?.message || error?.message || 'Unable to save bill.',
       });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleShareOnWhatsApp = async () => {
-    if (!validateBillBeforeSave()) {
-      return;
-    }
+  const handlePrintBill = () => {
+    if (!generatedBill) return;
+    openPrintWindow();
+  };
 
-    const whatsappNumber = normalizePhoneForWhatsApp(customer?.mobileNumber);
+  const handleShareOnWhatsApp = async () => {
+    if (!generatedBill || !generatedCustomer) return;
+
+    const whatsappNumber = normalizePhoneForWhatsApp(generatedCustomer.mobileNumber);
     if (!whatsappNumber) {
       setFeedback({ type: 'error', message: 'Customer mobile number is required to share bill on WhatsApp.' });
       return;
@@ -757,11 +786,12 @@ const Billing = () => {
 
     setSaving(true);
     try {
-      const { payload, billNumber } = await saveBillToDb();
-      const receiptBlob = await buildBillReceiptPng({ billNumber, payload, customer });
+      const payload = generatedBill;
+      const billNumber = generatedBill.billNumber;
+      const receiptBlob = await buildBillReceiptPng({ billNumber, payload, customer: generatedCustomer });
       const receiptFileName = `bill-${billNumber || Date.now()}.png`;
       const receiptFile = new File([receiptBlob], receiptFileName, { type: 'image/png' });
-      const message = buildWhatsAppBillMessage({ billNumber, payload });
+      const message = buildWhatsAppBillMessage({ billNumber, payload, billCustomer: generatedCustomer });
 
       if (navigator.share && navigator.canShare?.({ files: [receiptFile] })) {
         await navigator.share({
@@ -771,7 +801,7 @@ const Billing = () => {
         });
         setFeedback({
           type: 'success',
-          message: `Bill saved and shared as PNG for customer ${customer.id}.`,
+          message: `Bill shared as PNG for customer ${generatedCustomer.id}.`,
         });
         return;
       }
@@ -784,14 +814,14 @@ const Billing = () => {
       if (!shareWindow) {
         setFeedback({
           type: 'warning',
-          message: 'Bill saved and PNG downloaded. WhatsApp window was blocked; please open WhatsApp and attach the downloaded PNG manually.',
+          message: 'Bill PNG downloaded. WhatsApp window was blocked; please attach it manually.',
         });
         return;
       }
 
       setFeedback({
         type: 'success',
-        message: `Bill saved. PNG downloaded and WhatsApp opened for customer ${customer.id}.`,
+        message: `Bill shared. PNG downloaded and WhatsApp opened for customer ${generatedCustomer.id}.`,
       });
     } catch (error) {
       if (error?.name === 'AbortError') {
@@ -1179,9 +1209,15 @@ const Billing = () => {
                 Bill Summary
               </Typography>
               <Stack direction="row" justifyContent="space-between"><Typography color="text.secondary">Sub total</Typography><Typography fontWeight={700}>₹ {formatCurrency(subTotal)}</Typography></Stack>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                <Typography color="text.secondary">Discount</Typography>
-                <TextField size="small" type="number" value={billMeta.discount} onChange={handleBillMetaChange('discount')} inputProps={{ min: 0, step: 0.01 }} sx={{ width: 130 }} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
+              <Stack spacing={0.5}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                  <Typography color="text.secondary">Discount %</Typography>
+                  <TextField size="small" type="number" value={billMeta.discount} onChange={handleBillMetaChange('discount')} inputProps={{ min: 0, max: 100, step: 0.01 }} sx={{ width: 130 }} InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} />
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">Discount amount</Typography>
+                  <Typography variant="body2" fontWeight={700}>- ₹ {formatCurrency(discountAmount)}</Typography>
+                </Stack>
               </Stack>
               <Divider />
               <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Total</Typography><Typography sx={{ fontWeight: 800, color: '#2563eb', fontSize: 20 }}>₹ {formatCurrency(totalAmount)}</Typography></Stack>
@@ -1191,31 +1227,16 @@ const Billing = () => {
               </Stack>
               <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Balance due</Typography><Typography sx={{ fontWeight: 800, color: '#dc2626', fontSize: 18 }}>₹ {formatCurrency(remainingAmount)}</Typography></Stack>
               <Divider />
-              <Stack direction="row" spacing={1.2}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={handlePrintBill}
-                  disabled={saving}
-                  sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none' }}
-                >
-                  {saving ? 'Saving...' : 'Print Bill'}
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={handleShareOnWhatsApp}
-                  disabled={saving}
-                  aria-label="Share on WhatsApp"
-                  sx={{
-                    borderRadius: 2,
-                    minWidth: 44,
-                    width: 44,
-                    height: 40,
-                    px: 0,
-                  }}
-                  startIcon={<WhatsAppIcon />}
-                />
-              </Stack>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<ReceiptLongIcon />}
+                onClick={handleGenerateBill}
+                disabled={saving}
+                sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}
+              >
+                {saving ? 'Saving...' : 'Generate Bill'}
+              </Button>
             </Stack>
           </Box>
         </Grid>
@@ -1223,98 +1244,26 @@ const Billing = () => {
       </Paper>
 
       <Box ref={printRef} sx={{ display: 'none' }}>
-        <div className="header">
-          <div>
-            <h1>Tailoring Shop</h1>
-            <p className="muted">Customer Invoice</p>
-          </div>
-          <div>
-            <p className="muted">Bill No: {createdBillNumber || '-'}</p>
-            <p className="muted">Date: {billMeta.billDate}</p>
-            <p className="muted">Due: {billMeta.dueDate}</p>
-          </div>
-        </div>
-
-        <div className="card">
-          <h3>Customer Information</h3>
-          <p>
-            <strong>ID:</strong> {customer?.id || '-'}
-          </p>
-          <p>
-            <strong>Name:</strong> {customer?.name || '-'}
-          </p>
-          <p>
-            <strong>Mobile:</strong> {customer?.mobileNumber || '-'}
-          </p>
-          <p>
-            <strong>Address:</strong> {customer?.address || '-'}
-          </p>
-        </div>
-
-        <div className="card">
-          <h3>Bill Items</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Sr</th>
-                <th>Item</th>
-                <th>Description</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineTotals.map((row, index) => (
-                <tr key={row.id}>
-                  <td>{index + 1}</td>
-                  <td>{row.item}</td>
-                  <td>{row.description || '-'}</td>
-                  <td>
-                    {row.qty} {row.unit}
-                  </td>
-                  <td>₹ {formatCurrency(row.price)}</td>
-                  <td>₹ {formatCurrency(row.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="totals">
-            <div>
-              <span>Sub Total</span>
-              <span>₹ {formatCurrency(subTotal)}</span>
-            </div>
-            <div>
-              <span>Discount</span>
-              <span>₹ {formatCurrency(discountAmount)}</span>
-            </div>
-            <div className="grand">
-              <span>Total Amount</span>
-              <span>₹ {formatCurrency(totalAmount)}</span>
-            </div>
-            <div>
-              <span>Paid Amount</span>
-              <span>₹ {formatCurrency(paidAmount)}</span>
-            </div>
-            <div className="grand">
-              <span>Remaining Amount</span>
-              <span>₹ {formatCurrency(remainingAmount)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <p>
-            <strong>Payment Type:</strong> {billMeta.paymentType}
-          </p>
-          <p>
-            <strong>Notes:</strong> {billMeta.notes || 'Thank you for your business!'}
-          </p>
-        </div>
+        {generatedBill && <ViewBillPrintTemplate bill={generatedBill} />}
       </Box>
       </>
       )}
+
+      <Dialog open={Boolean(generatedBill)} onClose={() => setGeneratedBill(null)} fullWidth maxWidth="md">
+        <DialogTitle>Generated Bill</DialogTitle>
+        <DialogContent dividers>
+          {generatedBill && <BillDetailsCard bill={generatedBill} onPrint={handlePrintBill} />}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handlePrintBill} startIcon={<PrintIcon />} variant="outlined">
+            Print Bill
+          </Button>
+          <Button onClick={handleShareOnWhatsApp} startIcon={<WhatsAppIcon />} variant="contained" color="success" disabled={saving}>
+            Share on WhatsApp
+          </Button>
+          <Button onClick={() => setGeneratedBill(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

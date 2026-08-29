@@ -92,3 +92,9 @@ export const getDeliveryByDate = (date) =>
     `/report/delivery/${date}`,
     `/delivery/${date}`,
   ]);
+
+export const updateDeliveryStatus = (billNumber, status) =>
+  requestWithFallback(
+    'put',
+    `/billing/updateDeliveryStatus/${encodeURIComponent(billNumber)}/${encodeURIComponent(status)}`,
+  );

@@ -24,7 +24,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import {
   getCustomerById,
+  getCustomerByMobileNo,
   getCustomers,
+  getCustomersWithDeliveryDate,
   getCustomersWithBalance,
   updateCustomerBalence,
 } from '../../services/api';
@@ -103,17 +105,34 @@ const normalizeCustomer = (customer = {}) => {
     name: safeCustomer.name ?? safeCustomer.custName ?? safeCustomer.customerName ?? '',
     mobileNumber: safeCustomer.mobileNumber ?? safeCustomer.custMobileNumber ?? safeCustomer.phone ?? safeCustomer.mobile ?? '',
     address: safeCustomer.address ?? safeCustomer.custAddress ?? safeCustomer.customerAddress ?? '',
-    balance: safeCustomer.balance ?? safeCustomer.custBalance ?? safeCustomer.accountBalance ?? safeCustomer.outstandingBalance ?? '',
+    balance: safeCustomer.balance ?? safeCustomer.balanceAmount ?? safeCustomer.custBalance ?? safeCustomer.accountBalance ?? safeCustomer.outstandingBalance ?? '',
+    billNumber: safeCustomer.billNumber ?? safeCustomer.billNo ?? '',
+    deliveryDate: safeCustomer.deliveryDate ?? safeCustomer.deliverydate ?? safeCustomer.delivery_date ?? '',
+    deliveryStatus:
+      safeCustomer.deliveryStatus ??
+      safeCustomer.deliverystatus ??
+      safeCustomer.delivery_status ??
+      safeCustomer.delivery?.status ??
+      safeCustomer.delivery?.deliveryStatus ??
+      safeCustomer.orderStatus ??
+      safeCustomer.status ??
+      '',
     shirtMeasurements: {
       ...flatShirtFromCustomer,
-      ...resolveMeasurementMap(safeCustomer.shirtMeasurements ?? safeCustomer.shirtMeasurement ?? safeCustomer.measurements?.shirtMeasurements ?? safeCustomer.measurements?.shirtMeasurement ?? safeCustomer.measurement?.shirtMeasurements ?? safeCustomer.measurement?.shirtMeasurement ?? {}),
+      ...resolveMeasurementMap(safeCustomer.shirtMeasurements ?? safeCustomer.shirtMeasuremet ?? safeCustomer.shirtMeasurement ?? safeCustomer.measurements?.shirtMeasurements ?? safeCustomer.measurements?.shirtMeasuremet ?? safeCustomer.measurements?.shirtMeasurement ?? safeCustomer.measurement?.shirtMeasurements ?? safeCustomer.measurement?.shirtMeasuremet ?? safeCustomer.measurement?.shirtMeasurement ?? {}),
     },
     pantMeasurements: {
       ...flatPantFromCustomer,
-      ...resolveMeasurementMap(safeCustomer.pantMeasurements ?? safeCustomer.pantMeasurement ?? safeCustomer.measurements?.pantMeasurements ?? safeCustomer.measurements?.pantMeasurement ?? safeCustomer.measurement?.pantMeasurements ?? safeCustomer.measurement?.pantMeasurement ?? {}),
+      ...resolveMeasurementMap(safeCustomer.pantMeasurements ?? safeCustomer.pantMeasuremet ?? safeCustomer.pantMeasurement ?? safeCustomer.measurements?.pantMeasurements ?? safeCustomer.measurements?.pantMeasuremet ?? safeCustomer.measurements?.pantMeasurement ?? safeCustomer.measurement?.pantMeasurements ?? safeCustomer.measurement?.pantMeasuremet ?? safeCustomer.measurement?.pantMeasurement ?? {}),
     },
     measurementNotes: unwrapMeasurementPayload(safeCustomer.measurementNotes ?? { shirt: safeCustomer.notes ?? '', pant: safeCustomer.notes ?? '' }),
   };
+};
+
+const formatBalance = (value) => {
+  if (value === null || value === undefined || value === '') return '-';
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2) : value;
 };
 
 const parseJsonIfString = (payload) => {
@@ -240,20 +259,42 @@ const stripEmptyValues = (values = {}) => {
   }, {});
 };
 
+const normalizeMobileNumber = (value = '') => String(value).replace(/\D/g, '');
+
+const resolveCustomerFromLookupPayload = (payload) => {
+  const normalizedPayload = parseJsonIfString(payload);
+
+  if (Array.isArray(normalizedPayload)) {
+    return normalizeCustomer(normalizedPayload[0] ?? {});
+  }
+
+  if (normalizedPayload && typeof normalizedPayload === 'object') {
+    const listCandidate = extractCustomersList(normalizedPayload);
+    if (listCandidate.length > 0) {
+      return normalizeCustomer(listCandidate[0]);
+    }
+  }
+
+  return normalizeCustomer(normalizedPayload ?? {});
+};
+
 const getViewModeIndex = (mode) => {
   if (mode === 'create') return 0;
   if (mode === 'view') return 1;
-  if (mode === 'detail') return 2;
-  if (mode === 'all') return 3;
-  if (mode === 'withBalance') return 4;
+  if (mode === 'viewByMobile') return 2;
+  if (mode === 'detail') return 3;
+  if (mode === 'all') return 4;
+  if (mode === 'withBalance') return 5;
+  if (mode === 'delivery') return 6;
   return 0;
 };
 
-const  CustomerList = () => {
+const CustomerList = () => {
   const [viewMode, setViewMode] = useState('create');
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [searchValue, setSearchValue] = useState('');
+  const [mobileSearchValue, setMobileSearchValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [page, setPage] = useState(1);
@@ -263,6 +304,9 @@ const  CustomerList = () => {
   const [balanceCustomer, setBalanceCustomer] = useState(null);
   const [balanceAmount, setBalanceAmount] = useState('');
   const [updatingBalance, setUpdatingBalance] = useState(false);
+  const [deliveryCustomers, setDeliveryCustomers] = useState([]);
+  const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [deliveryPage, setDeliveryPage] = useState(1);
   const rowsPerPage = 20;
 
   const getCustomerWithMeasurements = async (customerId) => {
@@ -359,6 +403,28 @@ const  CustomerList = () => {
     }
   };
 
+  const loadCustomersWithDeliveryDate = async (date = deliveryDate) => {
+    if (!date) {
+      setFeedback({ type: 'error', message: 'Please select a delivery date.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await getCustomersWithDeliveryDate(date);
+      const data = extractCustomersList(response?.data);
+      setDeliveryCustomers(data.map(normalizeCustomer));
+      setDeliveryPage(1);
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error?.response?.data?.message || 'Unable to load customers for the selected delivery date.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSelectForEdit = (customer) => {
     const normalizedCustomer = normalizeCustomer(customer);
     setSelectedCustomer(normalizedCustomer);
@@ -388,6 +454,40 @@ const  CustomerList = () => {
       setViewMode('detail');
     } catch (error) {
       const message = error?.response?.data?.message || 'Unable to find that customer.';
+      setFeedback({ type: 'error', message });
+      setSelectedCustomer(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFindCustomerByMobile = async () => {
+    const mobileText = mobileSearchValue.trim();
+    const normalizedSearch = normalizeMobileNumber(mobileText);
+
+    if (!normalizedSearch) {
+      setFeedback({ type: 'error', message: 'Please enter a mobile number.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await getCustomerByMobileNo(normalizedSearch);
+      const matchedCustomer = resolveCustomerFromLookupPayload(response?.data);
+
+      if (!matchedCustomer?.id && !matchedCustomer?.name) {
+        setFeedback({ type: 'error', message: 'No customer found for that mobile number.' });
+        setSelectedCustomer(null);
+        return;
+      }
+
+      const lookupId = matchedCustomer?.id || normalizedSearch;
+      const customer = await getCustomerWithMeasurements(lookupId);
+      setSelectedCustomer(customer);
+      setFeedback({ type: 'success', message: 'Customer loaded successfully.' });
+      setViewMode('detail');
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Unable to find customer by mobile number.';
       setFeedback({ type: 'error', message });
       setSelectedCustomer(null);
     } finally {
@@ -470,10 +570,14 @@ const  CustomerList = () => {
       : value === 1
         ? 'view'
         : value === 2
-          ? 'detail'
+          ? 'viewByMobile'
           : value === 3
-            ? 'all'
-            : 'withBalance';
+            ? 'detail'
+            : value === 4
+              ? 'all'
+              : value === 5
+                ? 'withBalance'
+                : 'delivery';
     setViewMode(mode);
 
     if (mode === 'all') {
@@ -487,12 +591,20 @@ const  CustomerList = () => {
       setFeedback(null);
       await loadCustomersWithBalance();
     }
+
+    if (mode === 'delivery') {
+      setDeliveryPage(1);
+      setFeedback(null);
+      await loadCustomersWithDeliveryDate();
+    }
   };
 
   const pagedCustomers = customers.slice((page - 1) * rowsPerPage, page * rowsPerPage);
   const totalPages = Math.max(1, Math.ceil(customers.length / rowsPerPage));
   const pagedBalanceCustomers = balanceCustomers.slice((balancePage - 1) * rowsPerPage, balancePage * rowsPerPage);
   const totalBalancePages = Math.max(1, Math.ceil(balanceCustomers.length / rowsPerPage));
+  const pagedDeliveryCustomers = deliveryCustomers.slice((deliveryPage - 1) * rowsPerPage, deliveryPage * rowsPerPage);
+  const totalDeliveryPages = Math.max(1, Math.ceil(deliveryCustomers.length / rowsPerPage));
 
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: 3, width: '100%' }}>
@@ -515,9 +627,11 @@ const  CustomerList = () => {
           tabs={[
             { label: 'Create Customer' },
             { label: 'View Customer' },
+            { label: 'Find By Mobile' },
             { label: 'Customer Details' },
             { label: 'View All Customers' },
-            { label: 'With Balance > 0' },
+            { label: 'Customer with Balance' },
+            { label: 'Delivery Customers' },
           ]}
         />
       </Stack>
@@ -528,8 +642,8 @@ const  CustomerList = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3} sx={{ width: '100%', maxWidth: viewMode === 'detail' ? 1600 : viewMode === 'all' || viewMode === 'withBalance' ? 1400 : 1200, mx: 'auto' }}>
-        {viewMode !== 'all' && viewMode !== 'withBalance' && (
+      <Grid container spacing={3} sx={{ width: '100%', maxWidth: viewMode === 'detail' ? 1600 : viewMode === 'all' || viewMode === 'withBalance' || viewMode === 'delivery' ? 1400 : 1200, mx: 'auto' }}>
+        {viewMode !== 'all' && viewMode !== 'withBalance' && viewMode !== 'delivery' && (
         <Grid item xs={12} md={viewMode === 'detail' ? 12 : 4} sx={{ width: '100%' }}>
           <Paper
             sx={{
@@ -572,7 +686,44 @@ const  CustomerList = () => {
                         <Typography><strong>Mobile:</strong> {selectedCustomer.mobileNumber}</Typography>
                         <Typography><strong>Address:</strong> {selectedCustomer.address}</Typography>
                         {selectedCustomer.email && <Typography><strong>Email:</strong> {selectedCustomer.email}</Typography>}
-                        {selectedCustomer.balance != null && <Typography><strong>Balance:</strong> {selectedCustomer.balance}</Typography>}
+                        {selectedCustomer.balance != null && <Typography><strong>Balance:</strong> {formatBalance(selectedCustomer.balance)}</Typography>}
+                        {selectedCustomer.notes && <Typography><strong>Notes:</strong> {selectedCustomer.notes}</Typography>}
+                      </Paper>
+                    </Box>
+                  )}
+                </Stack>
+              </Box>
+            )}
+
+            {viewMode === 'viewByMobile' && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Find Customer By Mobile
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Enter a mobile number to fetch and view customer details.
+                </Typography>
+                <Stack spacing={2}>
+                  <TextField
+                    label="Mobile Number"
+                    value={mobileSearchValue}
+                    onChange={(event) => setMobileSearchValue(event.target.value)}
+                    fullWidth
+                  />
+                  <Button variant="outlined" onClick={handleFindCustomerByMobile} disabled={loading}>
+                    {loading ? 'Loading...' : 'Find Customer'}
+                  </Button>
+
+                  {selectedCustomer && (
+                    <Box sx={{ mt: 2 }}>
+                      <Paper variant="outlined" sx={{ p: 2 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>Customer Card</Typography>
+                        <Typography><strong>ID:</strong> {selectedCustomer.id}</Typography>
+                        <Typography><strong>Name:</strong> {selectedCustomer.name}</Typography>
+                        <Typography><strong>Mobile:</strong> {selectedCustomer.mobileNumber}</Typography>
+                        <Typography><strong>Address:</strong> {selectedCustomer.address}</Typography>
+                        {selectedCustomer.email && <Typography><strong>Email:</strong> {selectedCustomer.email}</Typography>}
+                        {selectedCustomer.balance != null && <Typography><strong>Balance:</strong> {formatBalance(selectedCustomer.balance)}</Typography>}
                         {selectedCustomer.notes && <Typography><strong>Notes:</strong> {selectedCustomer.notes}</Typography>}
                       </Paper>
                     </Box>
@@ -629,7 +780,7 @@ const  CustomerList = () => {
                           <TableCell>{customer.id}</TableCell>
                           <TableCell>{customer.name}</TableCell>
                           <TableCell>{customer.mobileNumber}</TableCell>
-                          <TableCell>{customer.balance != null && customer.balance !== '' ? customer.balance : '-'}</TableCell>
+                          <TableCell>{formatBalance(customer.balance)}</TableCell>
                           <TableCell>{customer.address}</TableCell>
                           <TableCell align="right">
                             <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -694,7 +845,7 @@ const  CustomerList = () => {
                           <TableCell>{customer.id}</TableCell>
                           <TableCell>{customer.name}</TableCell>
                           <TableCell>{customer.mobileNumber}</TableCell>
-                          <TableCell>{customer.balance != null && customer.balance !== '' ? customer.balance : '-'}</TableCell>
+                          <TableCell>{formatBalance(customer.balance)}</TableCell>
                           <TableCell>{customer.address}</TableCell>
                           <TableCell align="right">
                             <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -720,6 +871,88 @@ const  CustomerList = () => {
                         Previous
                       </Button>
                       <Button size="small" variant="outlined" disabled={balancePage === totalBalancePages} onClick={() => setBalancePage((prev) => Math.min(totalBalancePages, prev + 1))}>
+                        Next
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </>
+              )}
+            </Paper>
+          </Grid>
+        )}
+
+        {viewMode === 'delivery' && (
+          <Grid item xs={12} sx={{ width: '100%' }}>
+            <Paper sx={{ p: 3, width: '100%', mx: 'auto' }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Customers With Delivery
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 2 }}>
+                <TextField
+                  label="Delivery Date"
+                  type="date"
+                  value={deliveryDate}
+                  onChange={(event) => setDeliveryDate(event.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ minWidth: { sm: 220 } }}
+                />
+                <Button variant="contained" onClick={() => loadCustomersWithDeliveryDate()} disabled={loading || !deliveryDate}>
+                  {loading ? 'Loading...' : 'Find Customers'}
+                </Button>
+              </Stack>
+              <Divider sx={{ mb: 2 }} />
+              {loading ? (
+                <Typography color="text.secondary">Loading customers...</Typography>
+              ) : deliveryCustomers.length === 0 ? (
+                <Typography color="text.secondary">No customers found for the selected delivery date.</Typography>
+              ) : (
+                <>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>ID</TableCell>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Mobile</TableCell>
+                        <TableCell>Bill No</TableCell>
+                        <TableCell>Delivery Date</TableCell>
+                        <TableCell>Balance</TableCell>
+                        <TableCell>Address</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {pagedDeliveryCustomers.map((customer, index) => (
+                        <TableRow key={`${customer.id}-${customer.billNumber || 'delivery'}-${index}`} hover>
+                          <TableCell>{customer.id}</TableCell>
+                          <TableCell>{customer.name}</TableCell>
+                          <TableCell>{customer.mobileNumber}</TableCell>
+                          <TableCell>{customer.billNumber || '-'}</TableCell>
+                          <TableCell>{customer.deliveryDate || '-'}</TableCell>
+                          <TableCell>{formatBalance(customer.balance)}</TableCell>
+                          <TableCell>{customer.address}</TableCell>
+                          <TableCell align="right">
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Button size="small" startIcon={<EditIcon />} onClick={() => handleSelectForEdit(customer)}>
+                                Edit
+                              </Button>
+                              <Button size="small" startIcon={<VisibilityIcon />} onClick={() => handleSelectForView(customer)}>
+                                View
+                              </Button>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Page {deliveryPage} of {totalDeliveryPages}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button size="small" variant="outlined" disabled={deliveryPage === 1} onClick={() => setDeliveryPage((prev) => Math.max(1, prev - 1))}>
+                        Previous
+                      </Button>
+                      <Button size="small" variant="outlined" disabled={deliveryPage === totalDeliveryPages} onClick={() => setDeliveryPage((prev) => Math.min(totalDeliveryPages, prev + 1))}>
                         Next
                       </Button>
                     </Stack>

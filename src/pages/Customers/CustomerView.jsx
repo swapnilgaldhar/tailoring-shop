@@ -49,8 +49,14 @@ const defaultCustomer = {
   },
 };
 
+const formatBalance = (value) => {
+  if (value === null || value === undefined || value === '') return '0.00';
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2) : '0.00';
+};
+
 const CustomerView = ({ customer = defaultCustomer, onEdit }) => {
-  const deliveryStatus = customer.deliveryStatus ?? customer.delivery?.status ?? customer.delivery?.deliveryStatus ?? customer.orderStatus ?? 'Pending';
+  const deliveryStatus = customer.deliveryStatus ?? customer.deliverystatus ?? customer.delivery_status ?? customer.delivery?.status ?? customer.delivery?.deliveryStatus ?? customer.orderStatus ?? customer.status ?? 'Pending';
   const deliveryDate = customer.deliveryDate ?? customer.delivery?.date ?? customer.delivery?.deliveryDate ?? customer.deliveredAt ?? customer.deliveryAt ?? null;
   const deliveryItem = customer.deliveryItem ?? customer.delivery?.item ?? customer.delivery?.items ?? customer.orderItem ?? 'Tailoring item';
   const customerDetails = [
@@ -61,23 +67,13 @@ const CustomerView = ({ customer = defaultCustomer, onEdit }) => {
   const overviewCards = [
     {
       title: 'Outstanding Balance',
-      value: customer.balance != null && customer.balance !== '' ? `Rs. ${customer.balance}` : 'Rs. 0',
+      value: `Rs. ${formatBalance(customer.balance)}`,
       caption: 'Current due amount for this customer',
       accent: '#b45309',
       background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
       chip: 'Balance',
       chipColor: '#9a3412',
       chipBackground: '#fed7aa',
-    },
-    {
-      title: 'Delivery Status',
-      value: deliveryStatus,
-      caption: `${deliveryItem} • ${deliveryDate || 'Date not available'}`,
-      accent: '#166534',
-      background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-      chip: 'Delivery',
-      chipColor: '#166534',
-      chipBackground: '#bbf7d0',
     },
   ];
   const summaryCards = [

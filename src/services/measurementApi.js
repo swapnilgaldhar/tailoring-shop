@@ -94,6 +94,24 @@ export const getPantMeasurementById = (id) =>
     `/get/pant/${id}`,
   ]);
 
+export const getJacketMeasurementById = (id) =>
+  requestMeasurementPaths('get', [
+    `/measurement/get/jacket/measurement/${id}`,
+    `/get/jacket/measurement/${id}`,
+  ]);
+
+export const getBlazerMeasurementById = (id) =>
+  requestMeasurementPaths('get', [
+    `/measurement/get/blazer/measurement/${id}`,
+    `/get/blazer/measurement/${id}`,
+  ]);
+
+export const getSherwaniMeasurementById = (id) =>
+  requestMeasurementPaths('get', [
+    `/measurement/get/sherwani/measurement/${id}`,
+    `/get/sherwani/measurement/${id}`,
+  ]);
+
 const measurementCreatePaths = [
   '/measurement/create/measurement',
   '/createmeasurement',
@@ -117,6 +135,24 @@ export const createPantMeasurement = (measurement) =>
     '/measurement/create/pant/measurement',
     '/create/pant/measurement',
     '/pant/measurement/create',
+  ], measurement);
+
+export const createJacketMeasurement = (measurement) =>
+  requestMeasurementPaths('post', [
+    '/measurement/create/jacket/measurement',
+    '/create/jacket/measurement',
+  ], measurement);
+
+export const createBlazerMeasurement = (measurement) =>
+  requestMeasurementPaths('post', [
+    '/measurement/create/blazer/measurement',
+    '/create/blazer/measurement',
+  ], measurement);
+
+export const createSherwaniMeasurement = (measurement) =>
+  requestMeasurementPaths('post', [
+    '/measurement/create/sherwani/measurement',
+    '/create/sherwani/measurement',
   ], measurement);
 
 export const updateMeasurement = (id, measurement) =>
