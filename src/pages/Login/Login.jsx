@@ -77,7 +77,7 @@ const Login = () => {
           First Impression<br />Tailoring Shop
         </Typography>
         <Typography sx={{ opacity: 0.85, textAlign: 'center', fontSize: 15, maxWidth: 300 }}>
-          Manage your customers, measurements, orders and billing — all in one place.
+          Manage your customers, measurements, and billing — all in one place.
         </Typography>
         <Box sx={{ mt: 2, px: 3, py: 1.5, bgcolor: 'rgba(255,255,255,0.12)', borderRadius: 2 }}>
           <Typography sx={{ fontSize: 13, opacity: 0.9, textAlign: 'center' }}>

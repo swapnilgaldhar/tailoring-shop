@@ -77,13 +77,18 @@ export const getBillsByCustomerId = (customerId) =>
     `/getbillsbycustomer/${customerId}`,
   ]);
 
-export const getTodaysSales = () => requestWithFallback('get', '/report/todays/sales');
+export const getTodaysSales = () => requestWithFallback('get', ['/report/todays/sales', '/report/today/sales']);
 
-export const getMonthlySales = () => requestWithFallback('get', '/report/monthly/sales');
+export const getMonthlySales = () => requestWithFallback('get', ['/report/monthly/sales', '/report/month/sales']);
 
-export const getTodaysDelivery = () => requestWithFallback('get', '/report/todays/delivery');
+export const getTodaysDelivery = () =>
+  requestWithFallback('get', [
+    '/report/todays/delivery',
+    '/report/today/delivery',
+    '/delivery/today',
+  ]);
 
-export const getTodaysCollection = () => requestWithFallback('get', '/report/todays/collection');
+export const getTodaysCollection = () => requestWithFallback('get', ['/report/todays/collection', '/report/today/collection']);
 
 export const getCustomersWithBalanceCount = () => requestWithFallback('get', '/report/customers/withbalance');
 

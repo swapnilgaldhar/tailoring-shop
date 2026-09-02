@@ -53,7 +53,6 @@ export const sherwaniMeasurementFields = [
   { key: 'neck', marathi: 'कॉलर', english: 'Neck' },
   { key: 'cuff', marathi: 'कफ', english: 'Cuff' },
   { key: 'stand', marathi: 'स्टँड', english: 'Stand' },
-  { key: 'notes', marathi: 'टीप', english: 'Notes' },
 ];
 
 export const measurementBackendKeys = {

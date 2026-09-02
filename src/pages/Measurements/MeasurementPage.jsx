@@ -499,27 +499,30 @@ const buildMeasurementPayload = (formData, customer = null) => {
     shirtHip: shirtMeasurements.hip,
     pantWaist: pantMeasurements.waist,
     pantLength: pantMeasurements.length,
+    pantMeasurement: { ...pantMeasurements },
+    pantMeasuremet: { ...pantMeasurements },
+    pantLengthValue: pantMeasurements.length,
+    pantWaistValue: pantMeasurements.waist,
     hip: pantMeasurements.hip,
     thigh: pantMeasurements.thigh,
     knee: pantMeasurements.knee,
     calf: pantMeasurements.calf,
     bottom: pantMeasurements.bottom,
-    chest: jacketMeasurements.chest,
-    waist: jacketMeasurements.waist,
-    shoulder: jacketMeasurements.shoulder,
-    sleeve: jacketMeasurements.sleeve,
-    length: jacketMeasurements.length,
-    chest: blazerMeasurements.chest,
-    waist: blazerMeasurements.waist,
-    shoulder: blazerMeasurements.shoulder,
-    sleeve: blazerMeasurements.sleeve,
-    length: blazerMeasurements.length,
-    chest: sherwaniMeasurements.chest,
-    waist: sherwaniMeasurements.waist,
-    shoulder: sherwaniMeasurements.shoulder,
-    sleeve: sherwaniMeasurements.sleeve,
-    length: sherwaniMeasurements.length,
-    
+    jacketChest: jacketMeasurements.chest,
+    jacketWaist: jacketMeasurements.waist,
+    jacketShoulder: jacketMeasurements.shoulder,
+    jacketSleeve: jacketMeasurements.sleeve,
+    jacketLength: jacketMeasurements.length,
+    blazerChest: blazerMeasurements.chest,
+    blazerWaist: blazerMeasurements.waist,
+    blazerShoulder: blazerMeasurements.shoulder,
+    blazerSleeve: blazerMeasurements.sleeve,
+    blazerLength: blazerMeasurements.length,
+    sherwaniChest: sherwaniMeasurements.chest,
+    sherwaniWaist: sherwaniMeasurements.waist,
+    sherwaniShoulder: sherwaniMeasurements.shoulder,
+    sherwaniSleeve: sherwaniMeasurements.sleeve,
+    sherwaniLength: sherwaniMeasurements.length,
   };
 };
 
@@ -552,15 +555,20 @@ const buildPantMeasurementPayload = (formData, customer = null) => ({
         address: customer.address,
       }
     : undefined,
+  pantMeasurement: { ...formData.pantMeasurements },
   pantMeasuremet: { ...formData.pantMeasurements },
   pantLength: formData.pantMeasurements.length,
   pantWaist: formData.pantMeasurements.waist,
+  length: formData.pantMeasurements.length,
+  waist: formData.pantMeasurements.waist,
   hip: formData.pantMeasurements.hip,
   thigh: formData.pantMeasurements.thigh,
   knee: formData.pantMeasurements.knee,
   calf: formData.pantMeasurements.calf,
   bottom: formData.pantMeasurements.bottom,
+  chainFly: formData.pantMeasurements.chainFly ?? '',
   notes: toTrimmedString(formData.notes),
+  ...formData.pantMeasurements,
 });
 
 const buildTypedMeasurementPayload = (type, formData, customer = null) => {
@@ -570,8 +578,7 @@ const buildTypedMeasurementPayload = (type, formData, customer = null) => {
     ...values,
     notes,
   };
-
-  return {
+  const response = {
     customerId: toTrimmedString(formData.customerId),
     custId: toTrimmedString(formData.customerId),
     customerName: toTrimmedString(formData.customerName),
@@ -582,6 +589,17 @@ const buildTypedMeasurementPayload = (type, formData, customer = null) => {
     ...values,
     notes,
   };
+
+  if (type.formKey === 'pantMeasurements') {
+    response.pantMeasurement = backendMeasurement;
+    response.pantMeasuremet = backendMeasurement;
+    response.length = values.length ?? '';
+    response.waist = values.waist ?? '';
+    response.pantLength = values.length ?? '';
+    response.pantWaist = values.waist ?? '';
+  }
+
+  return response;
 };
 
 const hasMeasurementValues = (customer = {}) =>
@@ -1051,7 +1069,7 @@ const MeasurementPage = () => {
             Measurements
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            View all customers, open a single customer by ID, and maintain one shirt and one pant measurement profile per customer.
+            View all customers,Maintain Shirt, Pant, Jacket, Blazer, Sherwani Measurement profile per customer.
           </Typography>
         </Box>
        {/* <Button variant="contained" startIcon={<AddIcon />} onClick={beginNewMeasurement}>

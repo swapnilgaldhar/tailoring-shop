@@ -27,7 +27,48 @@ import { getCustomerCount, getCustomersWithDeliveryDate } from "../../services/a
 import { getTodaysDelivery, updateDeliveryStatus } from "../../services/billingApi";
 import dashboardBackground from "../../assets/images/Dashboard baground.jpg";
 
-const toNumber = (value) => { const n = Number(value); return Number.isFinite(n) ? n : 0; };
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+
+  if (Array.isArray(value)) {
+    return value.length || 0;
+  }
+
+  if (typeof value === 'object') {
+    const candidate =
+      value.count ??
+      value.total ??
+      value.totalCount ??
+      value.value ??
+      value.data ??
+      value.amount ??
+      value.result ??
+      value.records ??
+      value.todayDelivery ??
+      value.todaysDelivery ??
+      value.deliveryCount ??
+      value.deliveries ??
+      value.items ??
+      value.list ??
+      value.payload;
+
+    if (candidate !== undefined && candidate !== null && candidate !== value) {
+      const recursive = toNumber(candidate);
+      if (recursive !== 0 || candidate === 0 || candidate === '0') return recursive;
+    }
+
+    const nestedObjectValue = Object.values(value).find((entry) => entry !== null && entry !== undefined && entry !== '');
+    if (nestedObjectValue !== undefined) {
+      const recursive = toNumber(nestedObjectValue);
+      if (recursive !== 0 || nestedObjectValue === 0 || nestedObjectValue === '0') return recursive;
+    }
+
+    return 0;
+  }
+
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
 const extractList = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
