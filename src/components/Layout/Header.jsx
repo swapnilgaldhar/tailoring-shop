@@ -5,7 +5,7 @@ import {
   Box,
   Button,
 } from "@mui/material";
-import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import CheckroomIcon from "@mui/icons-material/Checkroom";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { useNavigate } from "react-router-dom";
 
@@ -33,7 +33,7 @@ const Header = ({ handleDrawerToggle }) => {
 
         {/* Shop Logo and Name */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
-          <LocalShippingIcon sx={{ color: "white", fontSize: "28px" }} />
+          <CheckroomIcon sx={{ color: "white", fontSize: "28px" }} />
           <Box>
             <Typography
               variant="h6"
@@ -45,7 +45,7 @@ const Header = ({ handleDrawerToggle }) => {
               variant="caption"
               sx={{ color: "rgba(255,255,255,0.8)", fontSize: "12px" }}
             >
-              Owner: Swapnil
+              Owner: Master Rajendra Galdhar.
             </Typography>
           </Box>
         </Box>

@@ -413,7 +413,7 @@ const VendorOrderForm = ({ onOrderAdded, prefillVendor = null }) => {
               type="date"
               size="small"
               required
-              
+              InputLabelProps={{ shrink: true }}
             />
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>

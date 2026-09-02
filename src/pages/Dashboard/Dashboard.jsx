@@ -24,8 +24,14 @@ import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import { getCustomerCount, getCustomersWithDeliveryDate } from "../../services/api";
-import { getTodaysDelivery, updateDeliveryStatus } from "../../services/billingApi";
+import { getTodaysDelivery, getTodaysSales, updateDeliveryStatus } from "../../services/billingApi";
 import dashboardBackground from "../../assets/images/Dashboard baground.jpg";
+
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return '₹0';
+  return `₹ ${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+};
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === '') return 0;
@@ -124,6 +130,7 @@ const normalizeDeliveryCustomer = (bill = {}) => ({
 
 const Dashboard = () => {
   const [todayCustomerCount, setTodayCustomerCount] = useState(0);
+  const [todaySales, setTodaySales] = useState(0);
   const [todayDelivery, setTodayDelivery] = useState(0);
   const [deliveryCustomers, setDeliveryCustomers] = useState([]);
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState(toISODate(new Date()));
@@ -189,6 +196,12 @@ const Dashboard = () => {
         console.error("Unable to load today's customer count.", error);
       }
       try {
+        const salesResponse = await getTodaysSales();
+        setTodaySales(toNumber(salesResponse?.data));
+      } catch (error) {
+        console.error("Unable to load today's sales.", error);
+      }
+      try {
         const response = await getTodaysDelivery();
         setTodayDelivery(toNumber(response?.data));
       } catch (error) {
@@ -222,7 +235,7 @@ const Dashboard = () => {
   const cards = [
     {
       title: "Today's Sales",
-      value: "₹ 12,450",
+      value: formatCurrency(todaySales),
       icon: <CurrencyRupeeIcon />,
       bg: "#E8F5E9",
       color: "#2E7D32",
