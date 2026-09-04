@@ -57,6 +57,9 @@ const requestMeasurementPaths = async (method, paths, data) => {
         return response;
       } catch (error) {
         lastError = error;
+        if (error?.response?.status && error.response.status !== 404) {
+          throw error;
+        }
       }
     }
   }
@@ -141,6 +144,7 @@ export const createJacketMeasurement = (measurement) =>
   requestMeasurementPaths('post', [
     '/measurement/create/jacket/measurement',
     '/create/jacket/measurement',
+    '/jacket/measurement/create',
   ], measurement);
 
 export const createBlazerMeasurement = (measurement) =>

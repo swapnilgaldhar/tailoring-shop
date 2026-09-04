@@ -603,6 +603,10 @@ const CustomerList = () => {
   const totalPages = Math.max(1, Math.ceil(customers.length / rowsPerPage));
   const pagedBalanceCustomers = balanceCustomers.slice((balancePage - 1) * rowsPerPage, balancePage * rowsPerPage);
   const totalBalancePages = Math.max(1, Math.ceil(balanceCustomers.length / rowsPerPage));
+  const totalCustomerBalance = balanceCustomers.reduce((total, customer) => {
+    const balance = Number(customer.balance);
+    return Number.isFinite(balance) ? total + balance : total;
+  }, 0);
   const pagedDeliveryCustomers = deliveryCustomers.slice((deliveryPage - 1) * rowsPerPage, deliveryPage * rowsPerPage);
   const totalDeliveryPages = Math.max(1, Math.ceil(deliveryCustomers.length / rowsPerPage));
 
@@ -830,6 +834,30 @@ const CustomerList = () => {
                 <>
                   <Table size="small">
                     <TableHead>
+                      <TableRow>
+                        <TableCell colSpan={5} />
+                        <TableCell align="right" sx={{ borderBottom: 0 }}>
+                          <Box
+                            sx={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-end',
+                              bgcolor: 'primary.main',
+                              color: 'primary.contrastText',
+                              px: 2,
+                              py: 1,
+                              borderRadius: 1,
+                              minWidth: 190,
+                            }}
+                          >
+                            <Typography variant="caption">Total Balance</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                              {formatBalance(totalCustomerBalance)}
+                              
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
                       <TableRow>
                         <TableCell>ID</TableCell>
                         <TableCell>Name</TableCell>

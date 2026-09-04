@@ -26,8 +26,7 @@ export const jacketMeasurementFields = [
   { key: 'waist', marathi: 'पोट', english: 'Waist' },
   { key: 'hip', marathi: 'सीट', english: 'Hip' },
   { key: 'shoulder', marathi: 'शोल्डर', english: 'Shoulder' },
-  { key: 'standCollar', marathi: 'स्टँड कॉलर', english: 'Stand Collar' },
-  { key: 'note', marathi: 'टीप', english: 'Note' },
+  { key: 'standCollar', marathi: 'स्टँड कॉलर', english: 'Stand Collar' }
 ];
 
 export const blazerMeasurementFields = [
@@ -38,7 +37,6 @@ export const blazerMeasurementFields = [
   { key: 'shoulder', marathi: 'शोल्डर', english: 'Shoulder' },
   { key: 'bicep', marathi: 'बायसेप', english: 'Bicep' },
   { key: 'sleeveLength', marathi: 'हात', english: 'Sleeve Length' },
-  { key: 'note', marathi: 'टीप', english: 'Note' },
   { key: 'cuffWidth', marathi: 'कफ', english: 'Cuff Width' },
   { key: 'lapelWidth', marathi: 'लॅपल', english: 'Lapel Width' },
 ];
@@ -58,7 +56,7 @@ export const sherwaniMeasurementFields = [
 export const measurementBackendKeys = {
   shirtMeasurements: 'shirtMeasurement',
   pantMeasurements: 'pantMeasuremet',
-  jacketMeasurements: 'jacketMeasuremet',
+  jacketMeasurements: 'jacketMeasurement',
   blazerMeasurements: 'blazerMeasurement',
   sherwaniMeasurements: 'sherwaniMeasuremet',
 };

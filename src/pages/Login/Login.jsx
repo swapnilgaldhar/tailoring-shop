@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -15,9 +16,6 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
-const VALID_USERNAME = 'admin';
-const VALID_PASSWORD = 'admin';
-
 const Login = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
@@ -26,21 +24,54 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    setTimeout(() => {
-      if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-        localStorage.setItem('authToken', 'dummy-token');
-        localStorage.setItem('authExpiry', String(Date.now() + 15 * 60 * 1000));
-        localStorage.setItem('user', JSON.stringify({ username }));
-        navigate('/dashboard');
-      } else {
-        setError('Invalid username or password. Please try again.');
-        setLoading(false);
+
+    try {
+      const response = await axios.post('http://localhost:8091/api/auth/login', {
+        mobileNumber: username,
+        password,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      });
+
+      const payload = response?.data ?? {};
+      const message = String(
+        payload?.message
+          ?? payload?.data?.message
+          ?? payload?.statusMessage
+          ?? payload?.msg
+          ?? ''
+      );
+
+      const isLoginSuccessful =
+        message.toLowerCase().includes('login successful')
+        || payload?.success === true
+        || payload?.status === 'success';
+
+      if (!isLoginSuccessful) {
+        throw new Error(message || 'Login failed. Please try again.');
       }
-    }, 500);
+
+      const token = payload?.token || payload?.data?.token || 'dummy-token';
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('authExpiry', String(Date.now() + 15 * 60 * 1000));
+      localStorage.setItem('user', JSON.stringify({ username, ...(payload?.user ?? payload?.data ?? {}) }));
+      navigate('/dashboard', { replace: true });
+    } catch (loginError) {
+      const backendMessage = loginError?.response?.data?.message
+        || loginError?.response?.data?.error
+        || loginError?.message
+        || 'Login failed. Please try again.';
+      setError(backendMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
