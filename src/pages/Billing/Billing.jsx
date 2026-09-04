@@ -630,7 +630,7 @@ const Billing = () => {
     const billItems = lineTotals.map((row) => ({
       itemName: row.item,
       itemDescription: row.description,
-      quantity: Math.trunc(toNumber(row.qty)),
+      quantity: toNumber(row.qty),
       rate: toNumber(row.price),
       amount: row.total,
     }));
@@ -731,8 +731,8 @@ const Billing = () => {
       return false;
     }
 
-    if (!items.some((row) => row.item && Number.isInteger(toNumber(row.qty)) && toNumber(row.qty) > 0 && toNumber(row.price) >= 0)) {
-      setFeedback({ type: 'error', message: 'Add at least one bill item with a whole-number quantity.' });
+    if (!items.some((row) => row.item && Number.isFinite(Number(row.qty)) && toNumber(row.qty) > 0 && Number.isFinite(Number(row.price)) && toNumber(row.price) >= 0)) {
+      setFeedback({ type: 'error', message: 'Add at least one bill item with a quantity greater than 0.' });
       return false;
     }
 
@@ -1024,7 +1024,7 @@ const Billing = () => {
               <TextField
                 size="small"
                 type="date"
-                label="Due Date"
+                label="Delivery Date"
                 value={billMeta.dueDate}
                 onChange={handleBillMetaChange('dueDate')}
                 InputLabelProps={{ shrink: true }}
@@ -1124,7 +1124,7 @@ const Billing = () => {
                             type="number"
                             value={row.qty}
                             onChange={handleItemChange(row.id, 'qty')}
-                            inputProps={{ min: 1, step: 1 }}
+                            inputProps={{ min: 0.01, step: 0.01 }}
                             sx={{ width: 90 }}
                           />
                          {/* /* <TextField

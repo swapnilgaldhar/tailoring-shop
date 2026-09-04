@@ -470,6 +470,11 @@ const CustomerList = () => {
       return;
     }
 
+    if (!/^\d{10}$/.test(normalizedSearch)) {
+      setFeedback({ type: 'error', message: 'Mobile number must contain exactly 10 digits.' });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await getCustomerByMobileNo(normalizedSearch);
@@ -711,8 +716,10 @@ const CustomerList = () => {
                   <TextField
                     label="Mobile Number"
                     value={mobileSearchValue}
-                    onChange={(event) => setMobileSearchValue(event.target.value)}
+                    onChange={(event) => setMobileSearchValue(event.target.value.replace(/\D/g, '').slice(0, 10))}
                     fullWidth
+                    type="tel"
+                    inputProps={{ inputMode: 'numeric', maxLength: 10, pattern: '[0-9]{10}' }}
                   />
                   <Button variant="outlined" onClick={handleFindCustomerByMobile} disabled={loading}>
                     {loading ? 'Loading...' : 'Find Customer'}

@@ -81,8 +81,9 @@ const AddCustomer = ({ onCustomerCreated }) => {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    const nextValue = name === 'mobileNumber' ? value.replace(/\D/g, '').slice(0, 10) : value;
 
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: nextValue }));
   };
 
   const handleSubmit = async (event) => {
@@ -90,6 +91,11 @@ const AddCustomer = ({ onCustomerCreated }) => {
 
     if (!formData.name.trim() || !formData.mobileNumber.trim() || !formData.address.trim()) {
       setFeedback({ type: 'error', message: 'Please fill in all customer details.' });
+      return;
+    }
+
+    if (!/^\d{10}$/.test(formData.mobileNumber.trim())) {
+      setFeedback({ type: 'error', message: 'Mobile number must contain exactly 10 digits.' });
       return;
     }
 
@@ -177,6 +183,8 @@ const AddCustomer = ({ onCustomerCreated }) => {
           onChange={handleChange}
           fullWidth
           required
+          type="tel"
+          inputProps={{ inputMode: 'numeric', maxLength: 10, pattern: '[0-9]{10}' }}
         />
         <Stack direction="row" spacing={1} alignItems="flex-start">
           <TextField
