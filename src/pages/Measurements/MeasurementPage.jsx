@@ -64,6 +64,18 @@ const measurementTypes = [
   { key: 'sherwani', label: 'Sherwani Measurement', formKey: 'sherwaniMeasurements', fields: sherwaniMeasurementFields },
 ];
 const FIXED_MEASUREMENT_ID = '101';
+const MEASUREMENT_VALUE_PATTERN = /^\d{1,2}(?:\.\d{1,2})?$/;
+
+const validateMeasurementValue = (value) => {
+  const normalizedValue = String(value ?? '').trim();
+  if (!normalizedValue) return '';
+
+  if (!MEASUREMENT_VALUE_PATTERN.test(normalizedValue) || Number(normalizedValue) > 99.99) {
+    return 'Enter a value from 0 to 99.99.';
+  }
+
+  return '';
+};
 
 const parseJsonIfString = (payload) => {
   if (typeof payload !== 'string') return payload;
@@ -658,6 +670,7 @@ const MeasurementPage = () => {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [measurementErrors, setMeasurementErrors] = useState({});
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -939,6 +952,11 @@ const MeasurementPage = () => {
     const measurementType = measurementTypes.find((type) => name.startsWith(`${type.formKey}.`));
     if (measurementType) {
       const key = name.split('.')[1];
+      const error = validateMeasurementValue(value);
+      setMeasurementErrors((previous) => ({
+        ...previous,
+        [name]: error,
+      }));
       setFormData((prev) => ({
         ...prev,
         [measurementType.formKey]: {
@@ -957,6 +975,7 @@ const MeasurementPage = () => {
 
   const handleMeasurementTypeChange = (_, value) => {
     setActiveFormMeasurementTab(value);
+    setMeasurementErrors({});
     setFormData((previous) => ({
       ...buildEmptyForm(),
       customerId: previous.customerId,
@@ -966,6 +985,7 @@ const MeasurementPage = () => {
 
   const beginNewMeasurement = () => {
     setFormData(buildEmptyForm());
+    setMeasurementErrors({});
     setActiveFormMeasurementTab(0);
     setSelectedCustomer(null);
     setSelectedMeasurement(null);
@@ -980,6 +1000,20 @@ const MeasurementPage = () => {
 
     if (!customerId) {
       setFeedback({ type: 'error', message: 'Customer ID is required.' });
+      return;
+    }
+
+    const selectedType = measurementTypes[activeFormMeasurementTab];
+    const validationErrors = selectedType.fields.reduce((errors, field) => {
+      const fieldName = `${selectedType.formKey}.${field.key}`;
+      const error = validateMeasurementValue(formData[selectedType.formKey][field.key]);
+      if (error) errors[fieldName] = error;
+      return errors;
+    }, {});
+
+    if (Object.keys(validationErrors).length > 0) {
+      setMeasurementErrors(validationErrors);
+      setFeedback({ type: 'error', message: 'Please enter valid measurement values from 0 to 99.99.' });
       return;
     }
 
@@ -1004,7 +1038,6 @@ const MeasurementPage = () => {
         }
       }
 
-      const selectedType = measurementTypes[activeFormMeasurementTab];
       const selectedMeasurementValues = {
         ...measurementFormData[selectedType.formKey],
         notes: toTrimmedString(measurementFormData.notes),
@@ -1282,6 +1315,9 @@ const MeasurementPage = () => {
                         name={`${activeFormType.formKey}.${field.key}`}
                         value={formData[activeFormType.formKey][field.key]}
                         onChange={handleFieldChange}
+                        error={Boolean(measurementErrors[`${activeFormType.formKey}.${field.key}`])}
+                        helperText={measurementErrors[`${activeFormType.formKey}.${field.key}`]}
+                        inputProps={{ inputMode: 'decimal' }}
                         fullWidth
                       />
                     </Grid>

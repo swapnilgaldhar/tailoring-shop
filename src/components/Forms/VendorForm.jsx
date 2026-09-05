@@ -25,9 +25,11 @@ const VendorForm = ({ onVendorAdded }) => {
 
   const handleInputChange = (event) => {
     const { name, value } = event.target;
+    const nextValue = name === 'venderPhone' ? value.replace(/\D/g, '').slice(0, 10) : value;
+
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: nextValue,
     }));
   };
 
@@ -48,6 +50,11 @@ const VendorForm = ({ onVendorAdded }) => {
 
     if (!formData.venderPhone.trim()) {
       setError('Vendor phone is required');
+      return;
+    }
+
+    if (!/^\d{10}$/.test(formData.venderPhone.trim())) {
+      setError('Mobile number must contain exactly 10 digits.');
       return;
     }
 
@@ -131,7 +138,9 @@ const VendorForm = ({ onVendorAdded }) => {
               name="venderPhone"
               value={formData.venderPhone}
               onChange={handleInputChange}
-              placeholder="e.g., +91 98765 43210"
+              placeholder="e.g., 9876543210"
+              type="tel"
+              slotProps={{ htmlInput: { maxLength: 10, inputMode: 'numeric' } }}
               size="small"
               required
             />
