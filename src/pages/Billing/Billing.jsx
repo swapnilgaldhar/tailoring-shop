@@ -31,7 +31,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import dayjs from 'dayjs';
 import { getCustomerById } from '../../services/api';
-import { createBill, getBillById } from '../../services/billingApi';
+import { createBill, getBillById, getBillsByCustomerId } from '../../services/billingApi';
 import PageTabs from '../../components/common/PageTabs';
 
 const ITEM_OPTIONS = [
@@ -47,6 +47,10 @@ const ITEM_OPTIONS = [
 ];
 
 const PAYMENT_TYPES = ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Credit'];
+const DISCOUNTABLE_ITEMS = new Set(['Suiting', 'Shirting']);
+const SHOP_NAME = 'FIRST IMPRESSION Tailoring & Premium Colletion';
+const SHOP_ADDRESS = 'Branch: 1.Bhosari. 2.Charholi Bhata, Alandi Road.';
+const SHOP_BRANDS = ['Raymond', 'GRADO', "Siyaram's", 'D & J', 'LINEN Club', 'Armani'];
 
 const createEmptyItem = () => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -76,6 +80,8 @@ const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const isDiscountableItem = (item) => DISCOUNTABLE_ITEMS.has(item);
 
 const normalizePhoneForWhatsApp = (phone = '') => {
   const digits = String(phone).replace(/\D/g, '');
@@ -108,6 +114,26 @@ const getFirstValue = (source, keys, fallback = '-') => {
   const value = keys.map((key) => source?.[key]).find((candidate) => candidate != null && candidate !== '');
   return value ?? fallback;
 };
+
+const extractBills = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+
+  const bills =
+    payload.bills ??
+    payload.data ??
+    payload.content ??
+    payload.items ??
+    payload.results ??
+    payload.list;
+
+  return Array.isArray(bills) ? bills : [];
+};
+
+const getDiscountAmount = (bill) => getFirstValue(bill, ['discountAmount', 'discount'], 0);
+
+const getDiscountPercent = (bill) =>
+  getFirstValue(bill, ['discountPer', 'discountPercent', 'discountPercentage'], 0);
 
 const extractBillNumberFromResponse = (responseData, responseHeaders = {}) => {
   let normalizedResponse = responseData;
@@ -226,12 +252,13 @@ const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
 
   drawRoundedRect(ctx, 60, 40, canvasWidth - 120, cardHeight, 34, '#ffffff');
 
-  ctx.fillStyle = '#1d4ed8';
-  ctx.font = '700 42px Arial';
-  ctx.fillText('Tailoring Shop', 110, 120);
+  ctx.fillStyle = '#D4AF37';
+  ctx.font = '700 34px Arial';
+  ctx.fillText(SHOP_NAME, 110, 116);
   ctx.fillStyle = '#64748b';
   ctx.font = '500 24px Arial';
-  ctx.fillText('Bill Receipt', 110, 158);
+  ctx.fillText(SHOP_ADDRESS, 110, 152);
+  ctx.fillText('Bill Receipt', 110, 184);
 
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 24px Arial';
@@ -241,25 +268,25 @@ const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
   ctx.strokeStyle = '#dbe6f5';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(100, 190);
-  ctx.lineTo(canvasWidth - 100, 190);
+  ctx.moveTo(100, 214);
+  ctx.lineTo(canvasWidth - 100, 214);
   ctx.stroke();
 
   ctx.fillStyle = '#334155';
   ctx.font = '600 22px Arial';
-  ctx.fillText(`Customer: ${customer?.name || '-'}`, 110, 242);
-  ctx.fillText(`Mobile: ${customer?.mobileNumber || '-'}`, 110, 278);
-  ctx.fillText(`Payment: ${payload.paymentMode || '-'}`, 110, 314);
+  ctx.fillText(`Customer: ${customer?.name || '-'}`, 110, 266);
+  ctx.fillText(`Mobile: ${customer?.mobileNumber || '-'}`, 110, 302);
+  ctx.fillText(`Payment: ${payload.paymentMode || '-'}`, 110, 338);
 
   const totalsX = 690;
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 22px Arial';
-  ctx.fillText(`Total: Rs ${formatCurrency(payload.totalAmount || 0)}`, totalsX, 242);
-  ctx.fillText(`Paid: Rs ${formatCurrency(payload.paidAmount || 0)}`, totalsX, 278);
+  ctx.fillText(`Total: Rs ${formatCurrency(payload.totalAmount || 0)}`, totalsX, 266);
+  ctx.fillText(`Paid: Rs ${formatCurrency(payload.paidAmount || 0)}`, totalsX, 302);
   ctx.fillStyle = '#dc2626';
-  ctx.fillText(`Balance: Rs ${formatCurrency(payload.balanceAmount || 0)}`, totalsX, 314);
+  ctx.fillText(`Balance: Rs ${formatCurrency(payload.balanceAmount || 0)}`, totalsX, 338);
 
-  const tableTop = 360;
+  const tableTop = 384;
   drawRoundedRect(ctx, 100, tableTop, canvasWidth - 200, 56, 12, '#eef5ff');
   ctx.fillStyle = '#1e3a8a';
   ctx.font = '700 20px Arial';
@@ -301,7 +328,8 @@ const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
 
   ctx.fillStyle = '#64748b';
   ctx.font = '500 18px Arial';
-  ctx.fillText('Generated from Tailoring Shop Billing', 110, canvasHeight - 28);
+  ctx.fillText(`Brands available: ${SHOP_BRANDS.join(', ')}`, 110, canvasHeight - 55);
+  ctx.fillText(`Generated from ${SHOP_NAME}`, 110, canvasHeight - 28);
 
   return blobFromCanvas(canvas);
 };
@@ -320,6 +348,14 @@ const BillDetailsCard = ({ bill, onPrint }) => {
         boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
       }}
     >
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 800, color: '#D4AF37' }}>
+          {SHOP_NAME}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {SHOP_ADDRESS}
+        </Typography>
+      </Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ mb: 2.5 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a' }}>
@@ -344,16 +380,17 @@ const BillDetailsCard = ({ bill, onPrint }) => {
           ['Bill Date', getFirstValue(bill, ['billDate'])],
           ['Delivery Date', getFirstValue(bill, ['deliveryDate', 'dueDate'])],
           ['Total Amount', `₹ ${formatCurrency(getFirstValue(bill, ['totalAmount'], 0))}`],
-          ['Discount', `₹ ${formatCurrency(getFirstValue(bill, ['discount'], 0))}`],
+          ['Discount Amount', `₹ ${formatCurrency(getDiscountAmount(bill))}`],
+          ['Discount %', `${formatCurrency(getDiscountPercent(bill))}%`],
           ['Paid Amount', `₹ ${formatCurrency(getFirstValue(bill, ['paidAmount'], 0))}`],
           ['Balance Amount', `₹ ${formatCurrency(getFirstValue(bill, ['balanceAmount', 'remainingAmount'], 0))}`],
         ].map(([label, value]) => (
           <Grid item xs={12} sm={6} md={4} key={label}>
             <Box
               sx={{
-                minHeight: 82,
+                minHeight: 60,
                 px: 2,
-                py: 1.5,
+                py: 1,
                 border: '1px solid #dbe6f5',
                 borderRadius: 1.5,
                 bgcolor: label === 'Balance Amount' ? '#fff7ed' : '#f8fbff',
@@ -422,6 +459,40 @@ const BillDetailsCard = ({ bill, onPrint }) => {
           {getFirstValue(bill, ['notes'])}
         </Typography>
       </Box>
+      <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #dbe6f5' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontWeight: 600 }}>
+          Brands available
+        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            justifyContent: 'flex-start',
+            alignItems: 'center',
+          }}
+        >
+          {SHOP_BRANDS.map((brand) => (
+            <Box
+              key={brand}
+              sx={{
+                px: 1.5,
+                py: 1,
+                border: '2px solid #1e3a8a',
+                borderRadius: 1,
+                minWidth: 100,
+                textAlign: 'center',
+                bgcolor: '#f8fbff',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#1e3a8a',
+              }}
+            >
+              {brand}
+            </Box>
+          ))}
+        </Box>
+      </Box>
     </Paper>
   );
 };
@@ -433,7 +504,8 @@ const ViewBillPrintTemplate = ({ bill }) => {
     <>
       <div className="header">
         <div>
-          <h1>Tailoring Shop</h1>
+          <h1>{SHOP_NAME}</h1>
+          <p className="muted">{SHOP_ADDRESS}</p>
           <p className="muted">Customer Invoice</p>
         </div>
         <div>
@@ -479,8 +551,12 @@ const ViewBillPrintTemplate = ({ bill }) => {
         </table>
         <div className="totals">
           <div>
-            <span>Discount</span>
-            <span>₹ {formatCurrency(getFirstValue(bill, ['discount'], 0))}</span>
+            <span>Discount Amount</span>
+            <span>₹ {formatCurrency(getDiscountAmount(bill))}</span>
+          </div>
+          <div>
+            <span>Discount %</span>
+            <span>{formatCurrency(getDiscountPercent(bill))}%</span>
           </div>
           <div className="grand">
             <span>Total Amount</span>
@@ -501,6 +577,13 @@ const ViewBillPrintTemplate = ({ bill }) => {
           <strong>Notes:</strong> {getFirstValue(bill, ['notes'])}
         </p>
       </div>
+      {/* // brand names
+      <div className="card">
+        <p>
+          <strong>Brands available:</strong> {SHOP_BRANDS.join(', ')}
+        </p>
+      </div>
+      */}
     </>
   );
 };
@@ -508,18 +591,22 @@ const ViewBillPrintTemplate = ({ bill }) => {
 const Billing = () => {
   const printRef = useRef(null);
   const viewBillPrintRef = useRef(null);
+  const customerBillPrintRefs = useRef({});
   const [activeTab, setActiveTab] = useState(0);
   const [customerLookupId, setCustomerLookupId] = useState('');
   const [billNumberLookup, setBillNumberLookup] = useState('');
+  const [customerBillsLookup, setCustomerBillsLookup] = useState('');
   const [generatedBill, setGeneratedBill] = useState(null);
   const [generatedCustomer, setGeneratedCustomer] = useState(null);
   const [loadedBill, setLoadedBill] = useState(null);
+  const [customerBills, setCustomerBills] = useState([]);
   const [customer, setCustomer] = useState(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(true);
   const [billMeta, setBillMeta] = useState(createInitialBillMeta);
   const [items, setItems] = useState([createEmptyItem()]);
   const [loadingCustomer, setLoadingCustomer] = useState(false);
   const [loadingBill, setLoadingBill] = useState(false);
+  const [loadingCustomerBills, setLoadingCustomerBills] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
@@ -537,8 +624,13 @@ const Billing = () => {
     [lineTotals],
   );
 
+  const discountableSubtotal = useMemo(
+    () => lineTotals.reduce((sum, row) => (isDiscountableItem(row.item) ? sum + row.total : sum), 0),
+    [lineTotals],
+  );
+
   const discountPercent = Math.min(Math.max(toNumber(billMeta.discount), 0), 100);
-  const discountAmount = (subTotal * discountPercent) / 100;
+  const discountAmount = (discountableSubtotal * discountPercent) / 100;
   const totalAmount = Math.max(subTotal - discountAmount, 0);
   const paidAmount = Math.min(toNumber(billMeta.paidAmount), totalAmount);
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
@@ -626,6 +718,30 @@ const Billing = () => {
     }
   };
 
+  const loadCustomerBills = async () => {
+    const customerId = customerBillsLookup.trim();
+    if (!customerId) {
+      setFeedback({ type: 'error', message: 'Enter a customer ID to view customer bills.' });
+      return;
+    }
+
+    setLoadingCustomerBills(true);
+    try {
+      const response = await getBillsByCustomerId(customerId);
+      const bills = extractBills(response?.data);
+      setCustomerBills(bills);
+      setFeedback(bills.length ? null : { type: 'info', message: 'No bills found for that customer.' });
+    } catch (error) {
+      setCustomerBills([]);
+      setFeedback({
+        type: 'error',
+        message: error?.response?.data?.message || 'Unable to load bills for that customer.',
+      });
+    } finally {
+      setLoadingCustomerBills(false);
+    }
+  };
+
   const buildBillPayload = () => {
     const billItems = lineTotals.map((row) => ({
       itemName: row.item,
@@ -661,7 +777,10 @@ const Billing = () => {
     const lines = [
       `Hello ${customerName},`,
       '',
-      `Your bill has been generated from Tailoring Shop.`,
+      `${SHOP_NAME}`,
+      `${SHOP_ADDRESS}`,
+      '',
+      `Your bill has been generated.`,
       `Bill No: ${billNumber || '-'}`,
       `Bill Date: ${payload.billDate}`,
       `Delivery Date: ${payload.deliveryDate}`,
@@ -669,12 +788,16 @@ const Billing = () => {
       'Items:',
       ...itemLines,
       '',
+      `Discount Amount: Rs ${formatCurrency(payload.discountAmount ?? payload.discount ?? 0)}`,
+      `Discount: ${formatCurrency(payload.discountPer ?? payload.discountPercent ?? 0)}%`,
       `Total: Rs ${formatCurrency(payload.totalAmount)}`,
       `Paid: Rs ${formatCurrency(payload.paidAmount)}`,
       `Balance: Rs ${formatCurrency(payload.balanceAmount)}`,
       '',
       `Payment Type: ${payload.paymentMode}`,
       `Notes: ${payload.notes || 'Thank you for your business!'}`,
+      '',
+       {/* `Brands available: ${SHOP_BRANDS.join(', ')}`, */}
     ];
 
     return lines.join('\n');
@@ -860,7 +983,7 @@ const Billing = () => {
       <PageTabs
         value={activeTab}
         onChange={(_, nextTab) => setActiveTab(nextTab)}
-        tabs={[{ label: 'Create Bill' }, { label: 'View Bill' }]}
+        tabs={[{ label: 'Create Bill' }, { label: 'View Bill' }, { label: 'Customer Bills' }]}
         sx={{ mb: 2, borderBottom: '1px solid #dbe6f5' }}
       />
 
@@ -905,6 +1028,55 @@ const Billing = () => {
               </Box>
             </>
           )}
+        </Stack>
+      ) : activeTab === 2 ? (
+        <Stack spacing={2}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 2.5 },
+              borderRadius: 2,
+              border: '1px solid #dbe6f5',
+              bgcolor: 'white',
+            }}
+          >
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <TextField
+                size="small"
+                label="Customer ID"
+                value={customerBillsLookup}
+                onChange={(event) => setCustomerBillsLookup(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') loadCustomerBills();
+                }}
+                sx={{ minWidth: { sm: 260 } }}
+              />
+              <Button variant="contained" onClick={loadCustomerBills} disabled={loadingCustomerBills}>
+                {loadingCustomerBills ? 'Loading...' : 'View Customer Bills'}
+              </Button>
+            </Stack>
+          </Paper>
+
+          {customerBills.map((bill, index) => {
+            const billKey = getFirstValue(bill, ['billNumber', 'billNo', 'id'], index);
+            const printKey = `${billKey}-${index}`;
+            return (
+              <Box key={printKey}>
+                <BillDetailsCard
+                  bill={bill}
+                  onPrint={() => openPrintWindow({ current: customerBillPrintRefs.current[printKey] })}
+                />
+                <Box
+                  ref={(element) => {
+                    customerBillPrintRefs.current[printKey] = element;
+                  }}
+                  sx={{ display: 'none' }}
+                >
+                  <ViewBillPrintTemplate bill={bill} />
+                </Box>
+              </Box>
+            );
+          })}
         </Stack>
       ) : (
       <>
@@ -1051,7 +1223,7 @@ const Billing = () => {
           </Box>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid item xs={12} md={7} sx={{ order: 1 }}>
           <Box
             sx={{
               borderTop: '1px solid #e2e8f0',
@@ -1166,7 +1338,7 @@ const Billing = () => {
           </Box>
         </Grid>
 
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12} md={7} sx={{ order: { xs: 2, md: 3 } }}>
           <Box
             sx={{
               height: '100%',
@@ -1194,7 +1366,7 @@ const Billing = () => {
           </Box>
         </Grid>
 
-        <Grid item xs={12} md={5}>
+        <Grid item xs={12} md={5} sx={{ order: { xs: 3, md: 2 } }}>
           <Box
             sx={{
               height: '100%',
@@ -1209,6 +1381,7 @@ const Billing = () => {
                 Bill Summary
               </Typography>
               <Stack direction="row" justifyContent="space-between"><Typography color="text.secondary">Sub total</Typography><Typography fontWeight={700}>₹ {formatCurrency(subTotal)}</Typography></Stack>
+              <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Discount applies to Suiting and Shirting</Typography><Typography variant="body2" fontWeight={700}>₹ {formatCurrency(discountableSubtotal)}</Typography></Stack>
               <Stack spacing={0.5}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
                   <Typography color="text.secondary">Discount %</Typography>

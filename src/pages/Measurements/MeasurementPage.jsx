@@ -1,3 +1,4 @@
+import JacketMeasurement from './jacketmeasurement.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -144,7 +145,14 @@ const pickMeasurementValue = (source = {}, aliases = []) => {
     const contained = entries.find(([key]) => normalizeLookupKey(key).includes(alias));
     if (contained) {
       const value = sanitizeMeasurementValue(contained[1]);
-      if (value !== '') return value;
+      if (value !== '' && (typeof value !== 'object' || value === null)) return value;
+    }
+  }
+
+  for (const [, value] of entries) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nestedValue = pickMeasurementValue(value, aliases);
+      if (nestedValue !== '') return nestedValue;
     }
   }
 
@@ -262,7 +270,7 @@ const normalizeCustomer = (customer = {}) => {
       ),
     },
     jacketMeasurements: normalizeMeasurementFields(
-      safeCustomer.jacketMeasurements ?? safeCustomer.jacketMeasuremet ?? safeCustomer.jacketMeasurement ?? safeCustomer.measurements?.jacketMeasurements ?? safeCustomer.measurements?.jacketMeasuremet ?? safeCustomer.measurements?.jacketMeasurement ?? safeCustomer.measurement?.jacketMeasurements ?? safeCustomer.measurement?.jacketMeasuremet ?? safeCustomer.measurement?.jacketMeasurement ?? {},
+      { ...safeCustomer, ...resolveMeasurementMap(safeCustomer.jacketMeasurements ?? safeCustomer.jacketMeasuremet ?? safeCustomer.jacketMeasurement ?? safeCustomer.measurements?.jacketMeasurements ?? safeCustomer.measurements?.jacketMeasuremet ?? safeCustomer.measurements?.jacketMeasurement ?? safeCustomer.measurement?.jacketMeasurements ?? safeCustomer.measurement?.jacketMeasuremet ?? safeCustomer.measurement?.jacketMeasurement ?? {}) },
       jacketMeasurementFields,
     ),
     blazerMeasurements: normalizeMeasurementFields(
@@ -280,7 +288,7 @@ const normalizeCustomer = (customer = {}) => {
 const coalesceMeasurementSource = (...sources) => {
   for (const source of sources) {
     const candidate = unwrapMeasurementPayload(source ?? {});
-    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length > 0) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.values(candidate).some((value) => value !== null && value !== undefined && String(value).trim() !== '')) {
       return candidate;
     }
   }
@@ -373,7 +381,7 @@ const normalizeMeasurement = (measurement = {}) => {
     customerName: root.customerName ?? root.customer?.name ?? '',
     shirtMeasurements: normalizeShirtMeasurements({ ...root, ...shirtSource }),
     pantMeasurements: normalizePantMeasurements({ ...root, ...pantSource }),
-    jacketMeasurements: normalizeMeasurementFields(jacketSource, jacketMeasurementFields),
+    jacketMeasurements: normalizeMeasurementFields(jacketSource, jacketMeasurementFields, 'jacket'),
     blazerMeasurements: normalizeMeasurementFields(blazerSource, blazerMeasurementFields),
     sherwaniMeasurements: normalizeMeasurementFields(sherwaniSource, sherwaniMeasurementFields),
     measurementNotes: {
@@ -386,10 +394,31 @@ const normalizeMeasurement = (measurement = {}) => {
   };
 };
 
-const normalizeMeasurementFields = (measurement = {}, fields) => {
+const normalizeMeasurementFields = (measurement = {}, fields, measurementType = '') => {
   const root = unwrapMeasurementPayload(measurement);
+  const nestedSource = measurementType
+    ? Object.entries(root).find(([key, value]) => normalizeLookupKey(key).includes(measurementType) && value && typeof value === 'object')?.[1]
+    : null;
+  const source = nestedSource && typeof nestedSource === 'object'
+    ? { ...root, ...unwrapMeasurementPayload(nestedSource) }
+    : root;
   return fields.reduce((values, field) => {
-    values[field.key] = pickMeasurementValue(root, [field.key]);
+    const aliases = [field.key];
+    if (measurementType) {
+      aliases.push(`${measurementType}${field.key.charAt(0).toUpperCase()}${field.key.slice(1)}`);
+    }
+    if (measurementType === 'jacket') {
+      const jacketAliases = {
+        length: ['jacketLength', 'jacket_length', 'height'],
+        chest: ['jacketChest', 'jacket_chest'],
+        waist: ['jacketWaist', 'jacket_waist'],
+        hip: ['jacketHip', 'jacket_hip'],
+        shoulder: ['jacketShoulder', 'jacket_shoulder'],
+        standCollar: ['jacketStandCollar', 'jacket_stand_collar', 'jacketStand', 'standCollar', 'stand'],
+      };
+      aliases.push(...(jacketAliases[field.key] || []));
+    }
+    values[field.key] = pickMeasurementValue(source, aliases);
     return values;
   }, {});
 };
@@ -439,6 +468,7 @@ const normalizePantMeasurements = (measurement = {}) => {
     waist: pickMeasurementValue(source, ['pantWaist', 'pant_waist', 'waist', 'pantwaist', 'waistSize', 'kamar', 'kambar']),
     hip: pickMeasurementValue(source, ['hip']),
     thigh: pickMeasurementValue(source, ['thigh']),
+    chainFly: pickMeasurementValue(source, ['chainFly', 'chain_fly', 'chainfly', 'pantChainFly', 'pant_chain_fly', 'chainFlyLength']),
     knee: pickMeasurementValue(source, ['knee']),
     calf: pickMeasurementValue(source, ['calf']),
     bottom: pickMeasurementValue(source, ['bottom']),
@@ -774,7 +804,7 @@ const MeasurementPage = () => {
 
     const customerShirt = coalesceMeasurementSource(customer?.shirtMeasurements, customer?.shirtMeasurement, customer?.measurements?.shirtMeasurements, customer?.measurements?.shirtMeasurement, customer?.measurement?.shirtMeasurements, customer?.measurement?.shirtMeasurement, genericData.shirtMeasurements, genericData.shirtMeasurement, shirtData.shirtMeasurements, shirtData.shirtMeasurement, listData.shirtMeasurements, listData.shirtMeasurement);
     const customerPant = coalesceMeasurementSource(customer?.pantMeasurements, customer?.pantMeasurement, customer?.measurements?.pantMeasurements, customer?.measurements?.pantMeasurement, customer?.measurement?.pantMeasurements, customer?.measurement?.pantMeasurement, genericData.pantMeasurements, genericData.pantMeasurement, pantData.pantMeasurements, pantData.pantMeasurement, listData.pantMeasurements, listData.pantMeasurement);
-    const customerJacket = coalesceMeasurementSource(customer?.jacketMeasurements, customer?.jacketMeasurement, genericData.jacketMeasurements, genericData.jacketMeasurement, jacketData.jacketMeasurements, jacketData.jacketMeasurement, listData.jacketMeasurements, listData.jacketMeasurement);
+    const customerJacket = coalesceMeasurementSource(customer?.jacketMeasurements, customer?.jacketMeasuremet, customer?.jacketMeasurement, customer?.measurements?.jacketMeasurements, customer?.measurements?.jacketMeasuremet, customer?.measurements?.jacketMeasurement, genericData.jacketMeasurements, genericData.jacketMeasuremet, genericData.jacketMeasurement, jacketData.jacketMeasurements, jacketData.jacketMeasuremet, jacketData.jacketMeasurement, listData.jacketMeasurements, listData.jacketMeasuremet, listData.jacketMeasurement);
     const customerBlazer = coalesceMeasurementSource(customer?.blazerMeasurements, customer?.blazerMeasurement, genericData.blazerMeasurements, genericData.blazerMeasurement, blazerData.blazerMeasurements, blazerData.blazerMeasurement, listData.blazerMeasurements, listData.blazerMeasurement);
     const customerSherwani = coalesceMeasurementSource(customer?.sherwaniMeasurements, customer?.sherwaniMeasurement, genericData.sherwaniMeasurements, genericData.sherwaniMeasurement, sherwaniData.sherwaniMeasurements, sherwaniData.sherwaniMeasurement, listData.sherwaniMeasurements, listData.sherwaniMeasurement);
 
@@ -811,7 +841,7 @@ const MeasurementPage = () => {
       customerName: customer.name || '',
       shirtMeasurements: normalizeShirtMeasurements(unifiedShirt),
       pantMeasurements: normalizePantMeasurements(unifiedPant),
-      jacketMeasurements: normalizeMeasurementFields(unifiedJacket, jacketMeasurementFields),
+      jacketMeasurements: normalizeMeasurementFields(unifiedJacket, jacketMeasurementFields, 'jacket'),
       blazerMeasurements: normalizeMeasurementFields(unifiedBlazer, blazerMeasurementFields),
       sherwaniMeasurements: normalizeMeasurementFields(unifiedSherwani, sherwaniMeasurementFields),
       measurementNotes: {
@@ -833,7 +863,7 @@ const MeasurementPage = () => {
         measurement.pantMeasurements,
         normalizePantMeasurements(customer?.pantMeasurements ?? {}),
       ),
-      jacketMeasurements: mergeMissingMeasurementValues(measurement.jacketMeasurements, normalizeMeasurementFields(customer?.jacketMeasurements ?? {}, jacketMeasurementFields)),
+      jacketMeasurements: mergeMissingMeasurementValues(measurement.jacketMeasurements, normalizeMeasurementFields(customer?.jacketMeasurements ?? {}, jacketMeasurementFields, 'jacket')),
       blazerMeasurements: mergeMissingMeasurementValues(measurement.blazerMeasurements, normalizeMeasurementFields(customer?.blazerMeasurements ?? {}, blazerMeasurementFields)),
       sherwaniMeasurements: mergeMissingMeasurementValues(measurement.sherwaniMeasurements, normalizeMeasurementFields(customer?.sherwaniMeasurements ?? {}, sherwaniMeasurementFields)),
     };
@@ -1303,27 +1333,35 @@ const MeasurementPage = () => {
 
               <Divider />
 
-              <Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                  {activeFormType.label}s
-                </Typography>
-                <Grid container spacing={2}>
-                  {activeFormType.fields.map((field) => (
-                    <Grid item xs={12} sm={6} md={4} key={field.key}>
-                      <TextField
-                        label={getMeasurementFieldLabel(field)}
-                        name={`${activeFormType.formKey}.${field.key}`}
-                        value={formData[activeFormType.formKey][field.key]}
-                        onChange={handleFieldChange}
-                        error={Boolean(measurementErrors[`${activeFormType.formKey}.${field.key}`])}
-                        helperText={measurementErrors[`${activeFormType.formKey}.${field.key}`]}
-                        inputProps={{ inputMode: 'decimal' }}
-                        fullWidth
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
+              {activeFormType.key === 'jacket' ? (
+                <JacketMeasurement
+                  formData={formData}
+                  measurementErrors={measurementErrors}
+                  onFieldChange={handleFieldChange}
+                />
+              ) : (
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                    {activeFormType.label}s
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {activeFormType.fields.map((field) => (
+                      <Grid item xs={12} sm={6} md={4} key={field.key}>
+                        <TextField
+                          label={getMeasurementFieldLabel(field)}
+                          name={`${activeFormType.formKey}.${field.key}`}
+                          value={formData[activeFormType.formKey][field.key]}
+                          onChange={handleFieldChange}
+                          error={Boolean(measurementErrors[`${activeFormType.formKey}.${field.key}`])}
+                          helperText={measurementErrors[`${activeFormType.formKey}.${field.key}`]}
+                          inputProps={{ inputMode: 'decimal' }}
+                          fullWidth
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
 
               <TextField
                 label="Notes"

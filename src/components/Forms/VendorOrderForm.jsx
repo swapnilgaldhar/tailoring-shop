@@ -186,6 +186,8 @@ const VendorOrderForm = ({ onOrderAdded, prefillVendor = null }) => {
         paymentMethod: formData.paymentMethod || 'Cash',
         orderDate: formData.orderDate || new Date().toISOString().slice(0, 10),
         orderReceivedDate: receivedDate,
+        orderRecivedDate: receivedDate,
+        order_recived_date: receivedDate,
         deliveryDate: receivedDate,
         updatedDate: new Date().toISOString().slice(0, 10),
       };

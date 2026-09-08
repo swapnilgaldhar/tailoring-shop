@@ -276,7 +276,7 @@ const Dashboard = () => {
     >
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
-          <Typography variant="overline" sx={{ letterSpacing: 2, color: "#777" }}>
+          <Typography variant="overline" sx={{ letterSpacing: 2, color: "#fa0202" }}>
             WORKSHOP OVERVIEW
           </Typography>
 
@@ -284,7 +284,7 @@ const Dashboard = () => {
             variant="h3"
             sx={{
               fontFamily: "Georgia",
-              color: "#1F3A30",
+              color: "#fce702",
               fontWeight: 500,
             }}
           >

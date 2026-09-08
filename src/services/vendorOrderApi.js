@@ -97,7 +97,12 @@ const vendorOrderApi = {
         : null;
 
       // Ensure received date is always set
-      const receivedDate = orderData.orderReceivedDate || orderData.deliveryDate || new Date().toISOString().slice(0, 10);
+      const receivedDate =
+        orderData.orderReceivedDate ||
+        orderData.orderRecivedDate ||
+        orderData.order_recived_date ||
+        orderData.deliveryDate ||
+        new Date().toISOString().slice(0, 10);
 
       const payload = {
         invoiceNo: Number(orderData.invoiceNo),
@@ -113,6 +118,8 @@ const vendorOrderApi = {
         paymentMethod: orderData.paymentMethod || 'Cash',
         orderDate: orderData.orderDate || new Date().toISOString().slice(0, 10),
         orderReceivedDate: receivedDate,
+        orderRecivedDate: receivedDate,
+        order_recived_date: receivedDate,
         deliveryDate: receivedDate,
         updatedDate: orderData.updatedDate || new Date().toISOString().slice(0, 10),
       };

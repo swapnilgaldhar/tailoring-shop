@@ -71,6 +71,7 @@ export const getBillById = (id) =>
 
 export const getBillsByCustomerId = (customerId) =>
   requestWithFallback('get', [
+    `/billing/getallbills/${encodeURIComponent(customerId)}`,
     `/bill/customer/${customerId}`,
     `/billing/customer/${customerId}`,
     `/bills/customer/${customerId}`,

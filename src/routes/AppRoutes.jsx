@@ -10,8 +10,9 @@ import Measurements from "../pages/Measurements/Measurements";
 import Orders from "../pages/Orders/Orders";
 import Billing from "../pages/Billing/Billing";
 import Reports from "../pages/Reports/Reports";
-import Inventory from "../pages/Inventory/Inventory";
+import Inventory from "../pages/Inventory/Inventry";
 import Employees from "../pages/Employees/Employees";
+import Settings from "../pages/Settings/Settings";
 
 const AppRoutes = () => {
   return (
@@ -52,6 +53,7 @@ const AppRoutes = () => {
           <Route path="reports" element={<Reports />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
 
       </Routes>

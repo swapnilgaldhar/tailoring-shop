@@ -9,6 +9,10 @@ export default defineConfig({
         target: 'http://localhost:8091',
         changeOrigin: true,
       },
+      '/stichingorder': {
+        target: 'http://localhost:8091',
+        changeOrigin: true,
+      },
     },
   },
 })
