@@ -252,7 +252,7 @@ const Dashboard = () => {
       value: "24",
       icon: <ContentCutOutlinedIcon />,
       bg: "#F3E5F5",
-      color: "#6A1B9A",
+      color: "#980170",
     },
     {
       title: "Today's Delivery",

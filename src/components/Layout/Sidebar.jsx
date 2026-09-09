@@ -90,11 +90,11 @@ const Sidebar = () => {
       {/* Branding Header */}
       <Box
         sx={{
-          background: "#1976d2",
+          background: "#980170", /* 980170*/
           color: "white",
           padding: "15px 10px",
           textAlign: "center",
-          borderBottom: "1px solid #ddd"
+          borderBottom: "1px solid #980170"
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1, marginBottom: 1 }}>
@@ -128,6 +128,7 @@ const Sidebar = () => {
             key={item.text}
             component={Link}
             to={item.path}
+            
           >
 
             <ListItemIcon>
