@@ -24,10 +24,57 @@ import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import { getCustomerCount, getCustomersWithDeliveryDate } from "../../services/api";
-import { getTodaysDelivery, updateDeliveryStatus } from "../../services/billingApi";
+import { getTodaysDelivery, getTodaysSales, updateDeliveryStatus } from "../../services/billingApi";
 import dashboardBackground from "../../assets/images/Dashboard baground.jpg";
 
-const toNumber = (value) => { const n = Number(value); return Number.isFinite(n) ? n : 0; };
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return '₹0';
+  return `₹ ${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+};
+
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+
+  if (Array.isArray(value)) {
+    return value.length || 0;
+  }
+
+  if (typeof value === 'object') {
+    const candidate =
+      value.count ??
+      value.total ??
+      value.totalCount ??
+      value.value ??
+      value.data ??
+      value.amount ??
+      value.result ??
+      value.records ??
+      value.todayDelivery ??
+      value.todaysDelivery ??
+      value.deliveryCount ??
+      value.deliveries ??
+      value.items ??
+      value.list ??
+      value.payload;
+
+    if (candidate !== undefined && candidate !== null && candidate !== value) {
+      const recursive = toNumber(candidate);
+      if (recursive !== 0 || candidate === 0 || candidate === '0') return recursive;
+    }
+
+    const nestedObjectValue = Object.values(value).find((entry) => entry !== null && entry !== undefined && entry !== '');
+    if (nestedObjectValue !== undefined) {
+      const recursive = toNumber(nestedObjectValue);
+      if (recursive !== 0 || nestedObjectValue === 0 || nestedObjectValue === '0') return recursive;
+    }
+
+    return 0;
+  }
+
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
 const extractList = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
@@ -83,6 +130,7 @@ const normalizeDeliveryCustomer = (bill = {}) => ({
 
 const Dashboard = () => {
   const [todayCustomerCount, setTodayCustomerCount] = useState(0);
+  const [todaySales, setTodaySales] = useState(0);
   const [todayDelivery, setTodayDelivery] = useState(0);
   const [deliveryCustomers, setDeliveryCustomers] = useState([]);
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState(toISODate(new Date()));
@@ -148,6 +196,12 @@ const Dashboard = () => {
         console.error("Unable to load today's customer count.", error);
       }
       try {
+        const salesResponse = await getTodaysSales();
+        setTodaySales(toNumber(salesResponse?.data));
+      } catch (error) {
+        console.error("Unable to load today's sales.", error);
+      }
+      try {
         const response = await getTodaysDelivery();
         setTodayDelivery(toNumber(response?.data));
       } catch (error) {
@@ -181,7 +235,7 @@ const Dashboard = () => {
   const cards = [
     {
       title: "Today's Sales",
-      value: "₹ 12,450",
+      value: formatCurrency(todaySales),
       icon: <CurrencyRupeeIcon />,
       bg: "#E8F5E9",
       color: "#2E7D32",
@@ -222,7 +276,7 @@ const Dashboard = () => {
     >
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
-          <Typography variant="overline" sx={{ letterSpacing: 2, color: "#777" }}>
+          <Typography variant="overline" sx={{ letterSpacing: 2, color: "#fa0202" }}>
             WORKSHOP OVERVIEW
           </Typography>
 
@@ -230,7 +284,7 @@ const Dashboard = () => {
             variant="h3"
             sx={{
               fontFamily: "Georgia",
-              color: "#1F3A30",
+              color: "#fce702",
               fontWeight: 500,
             }}
           >

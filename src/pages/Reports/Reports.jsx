@@ -25,10 +25,58 @@ const extractList = (payload) => {
     .map((key) => payload[key]).find(Array.isArray) || [];
 };
 
-const toNumber = (value) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+const readReportCount = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+
+  if (Array.isArray(value)) return value.length || 0;
+
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (typeof value === 'object') {
+    const candidates = [
+      value.count,
+      value.total,
+      value.totalCount,
+      value.value,
+      value.data,
+      value.amount,
+      value.result,
+      value.records,
+      value.todaysDelivery,
+      value.deliveryCount,
+      value.deliveries,
+      value.items,
+      value.list,
+      value.payload,
+      value.reportCount,
+      value.data?.count,
+      value.data?.total,
+      value.data?.totalCount,
+      value.data?.value,
+    ];
+
+    for (const candidate of candidates) {
+      const parsed = readReportCount(candidate);
+      if (parsed !== 0 || candidate === 0 || candidate === '0') {
+        return parsed;
+      }
+    }
+
+    const nested = Object.values(value).find((entry) => entry !== null && entry !== undefined && entry !== '');
+    if (nested !== undefined) return readReportCount(nested);
+
+    return 0;
+  }
+
+  return 0;
 };
+
+const toNumber = (value) => readReportCount(value);
 
 const toDate = (value) => {
   const parsed = dayjs(value);
@@ -120,11 +168,11 @@ const Reports = () => {
         setTodayCustomerCount(Number.isFinite(Number(count)) ? Number(count) : 0);
       }
       if (billResult.status === 'fulfilled') setBills(extractList(billResult.value?.data).map(normalizeBill));
-      if (todaySalesResult.status === 'fulfilled') setTodaySales(toNumber(todaySalesResult.value?.data));
-      if (monthlySalesResult.status === 'fulfilled') setMonthlySales(toNumber(monthlySalesResult.value?.data));
-      if (todayDeliveryResult.status === 'fulfilled') setTodayDelivery(toNumber(todayDeliveryResult.value?.data));
-      if (todayCollectionResult.status === 'fulfilled') setTodayCollection(toNumber(todayCollectionResult.value?.data));
-      if (customersWithBalanceResult.status === 'fulfilled') setCustomersWithBalanceCount(toNumber(customersWithBalanceResult.value?.data));
+      if (todaySalesResult.status === 'fulfilled') setTodaySales(readReportCount(todaySalesResult.value?.data));
+      if (monthlySalesResult.status === 'fulfilled') setMonthlySales(readReportCount(monthlySalesResult.value?.data));
+      if (todayDeliveryResult.status === 'fulfilled') setTodayDelivery(readReportCount(todayDeliveryResult.value?.data));
+      if (todayCollectionResult.status === 'fulfilled') setTodayCollection(readReportCount(todayCollectionResult.value?.data));
+      if (customersWithBalanceResult.status === 'fulfilled') setCustomersWithBalanceCount(readReportCount(customersWithBalanceResult.value?.data));
       if (customerResult.status === 'rejected' && customerCountResult.status === 'rejected' && billResult.status === 'rejected' && todaySalesResult.status === 'rejected' && monthlySalesResult.status === 'rejected' && todayDeliveryResult.status === 'rejected' && todayCollectionResult.status === 'rejected' && customersWithBalanceResult.status === 'rejected') setError('Unable to load report data. Check that the customer and billing APIs are running.');
       setLoading(false);
     };
@@ -139,8 +187,8 @@ const Reports = () => {
       try {
         const result = await getDeliveryByDate(deliveryCheckDate);
         if (!active) return;
-        const count = result?.data?.count ?? result?.data?.data ?? result?.data;
-        setSelectedDateDeliveryCount(toNumber(count));
+        const count = readReportCount(result?.data);
+        setSelectedDateDeliveryCount(count);
       } catch {
         if (!active) return;
         setSelectedDateDeliveryCount(0);

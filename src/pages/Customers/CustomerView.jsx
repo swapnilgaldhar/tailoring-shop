@@ -11,7 +11,10 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import {
+  blazerMeasurementFields,
+  jacketMeasurementFields,
   pantMeasurementFields,
+  sherwaniMeasurementFields,
   shirtMeasurementFields,
 } from '../../constants/measurementFields';
 
@@ -43,6 +46,9 @@ const defaultCustomer = {
     calf: '14"',
     bottom: '16"',
   },
+  jacketMeasurements: {},
+  blazerMeasurements: {},
+  sherwaniMeasurements: {},
   measurementNotes: {
     shirt: 'Front chest adjusted by 0.5 inch for comfort fit.',
     pant: 'Pant bottom kept medium slim as requested.',
@@ -152,6 +158,16 @@ const CustomerView = ({ customer = defaultCustomer, onEdit }) => {
     value: customer.pantMeasurements?.[field.key],
   }));
 
+  const buildMeasurementItems = (fields, values) => fields.map((field) => ({
+    label: field.english,
+    secondaryLabel: field.marathi,
+    value: values?.[field.key],
+  }));
+
+  const jacketMeasurements = buildMeasurementItems(jacketMeasurementFields, customer.jacketMeasurements);
+  const blazerMeasurements = buildMeasurementItems(blazerMeasurementFields, customer.blazerMeasurements);
+  const sherwaniMeasurements = buildMeasurementItems(sherwaniMeasurementFields, customer.sherwaniMeasurements);
+
   const measurementSections = [
     {
       title: 'Shirt Measurements',
@@ -162,6 +178,21 @@ const CustomerView = ({ customer = defaultCustomer, onEdit }) => {
       title: 'Pant Measurements',
       items: pantMeasurements,
       notes: customer.measurementNotes?.pant,
+    },
+    {
+      title: 'Jacket Measurements',
+      items: jacketMeasurements,
+      notes: customer.measurementNotes?.jacket,
+    },
+    {
+      title: 'Blazer Measurements',
+      items: blazerMeasurements,
+      notes: customer.measurementNotes?.blazer,
+    },
+    {
+      title: 'Sherwani Measurements',
+      items: sherwaniMeasurements,
+      notes: customer.measurementNotes?.sherwani,
     },
   ];
 

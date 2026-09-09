@@ -33,9 +33,17 @@ import {
 import {
   getMeasurementById,
   getMeasurements,
+  getBlazerMeasurementById,
+  getJacketMeasurementById,
   getPantMeasurementById,
   getShirtMeasurementById,
+  getSherwaniMeasurementById,
 } from '../../services/measurementApi';
+import {
+  blazerMeasurementFields,
+  jacketMeasurementFields,
+  sherwaniMeasurementFields,
+} from '../../constants/measurementFields';
 import AddCustomer from './AddCustomer';
 import CustomerView from './CustomerView';
 import PageTabs from '../../components/common/PageTabs';
@@ -211,10 +219,37 @@ const normalizePantMeasurements = (measurement = {}) => {
     waist: source.pantWaist ?? source.waist ?? '',
     hip: source.hip ?? '',
     thigh: source.thigh ?? '',
+    chainFly: source.chainFly ?? source.chain_fly ?? source.chainfly ?? source.pantChainFly ?? '',
     knee: source.knee ?? '',
     calf: source.calf ?? '',
     bottom: source.bottom ?? '',
   };
+};
+
+const normalizeAdditionalMeasurements = (measurement = {}, fields, prefix) => {
+  const root = unwrapMeasurementPayload(measurement);
+  const nested = unwrapMeasurementPayload(
+    root.measurements ?? root.measurement ?? root
+  );
+  const source = { ...root, ...nested };
+
+  const normalizeKey = (key) => String(key).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const readValue = (field) => {
+    const aliases = [field.key];
+    if (prefix) aliases.push(`${prefix}${field.key.charAt(0).toUpperCase()}${field.key.slice(1)}`);
+    const normalizedAliases = aliases.map(normalizeKey);
+    const entry = Object.entries(source).find(([key, value]) => {
+      if (value === null || value === undefined || value === '') return false;
+      const normalizedEntryKey = normalizeKey(key);
+      return normalizedAliases.some((alias) => normalizedEntryKey === alias || normalizedEntryKey.includes(alias));
+    });
+    return entry?.[1] ?? '';
+  };
+
+  return fields.reduce((result, field) => {
+    result[field.key] = readValue(field);
+    return result;
+  }, {});
 };
 
 const extractCustomersList = (payload) => {
@@ -314,9 +349,12 @@ const CustomerList = () => {
     const baseCustomer = normalizeCustomer(response?.data);
     const lookupId = baseCustomer?.id || customerId;
 
-    const [shirtResult, pantResult, genericResult, allMeasurementsResult] = await Promise.allSettled([
+    const [shirtResult, pantResult, jacketResult, blazerResult, sherwaniResult, genericResult, allMeasurementsResult] = await Promise.allSettled([
       getShirtMeasurementById(lookupId),
       getPantMeasurementById(lookupId),
+      getJacketMeasurementById(lookupId),
+      getBlazerMeasurementById(lookupId),
+      getSherwaniMeasurementById(lookupId),
       getMeasurementById(lookupId),
       getMeasurements(),
     ]);
@@ -324,6 +362,9 @@ const CustomerList = () => {
     const genericData = readMeasurementObject(genericResult.status === 'fulfilled' ? genericResult.value?.data : {});
     const shirtData = readMeasurementObject(shirtResult.status === 'fulfilled' ? shirtResult.value?.data : {});
     const pantData = readMeasurementObject(pantResult.status === 'fulfilled' ? pantResult.value?.data : {});
+    const jacketData = readMeasurementObject(jacketResult.status === 'fulfilled' ? jacketResult.value?.data : {});
+    const blazerData = readMeasurementObject(blazerResult.status === 'fulfilled' ? blazerResult.value?.data : {});
+    const sherwaniData = readMeasurementObject(sherwaniResult.status === 'fulfilled' ? sherwaniResult.value?.data : {});
     const allMeasurements =
       allMeasurementsResult.status === 'fulfilled'
         ? extractMeasurementRecords(allMeasurementsResult.value?.data)
@@ -353,6 +394,26 @@ const CustomerList = () => {
       ...stripEmptyValues(readMeasurementObject(pantData.pantMeasurements ?? pantData.pantMeasurement ?? pantData.measurements?.pantMeasurements ?? pantData.measurements?.pantMeasurement)),
       ...stripEmptyValues(pantData),
     };
+    const unifiedJacket = {
+      ...stripEmptyValues(baseCustomer.jacketMeasurements),
+      ...stripEmptyValues(baseCustomer.jacketMeasurement),
+      ...stripEmptyValues(listData.jacketMeasurements ?? listData.jacketMeasuremet ?? listData.jacketMeasurement ?? listData.measurements?.jacketMeasurements ?? listData.measurements?.jacketMeasuremet ?? listData.measurements?.jacketMeasurement),
+      ...stripEmptyValues(genericData.jacketMeasurements ?? genericData.jacketMeasuremet ?? genericData.jacketMeasurement ?? genericData.measurements?.jacketMeasurements ?? genericData.measurements?.jacketMeasuremet ?? genericData.measurements?.jacketMeasurement),
+      ...stripEmptyValues(jacketData.jacketMeasurements ?? jacketData.jacketMeasuremet ?? jacketData.jacketMeasurement ?? jacketData.measurements?.jacketMeasurements ?? jacketData.measurements?.jacketMeasuremet ?? jacketData.measurements?.jacketMeasurement),
+      ...stripEmptyValues(jacketData),
+    };
+    const unifiedBlazer = {
+      ...stripEmptyValues(listData.blazerMeasurements ?? listData.blazerMeasurement ?? listData.measurements?.blazerMeasurements ?? listData.measurements?.blazerMeasurement),
+      ...stripEmptyValues(genericData.blazerMeasurements ?? genericData.blazerMeasurement ?? genericData.measurements?.blazerMeasurements ?? genericData.measurements?.blazerMeasurement),
+      ...stripEmptyValues(blazerData.blazerMeasurements ?? blazerData.blazerMeasurement ?? blazerData.measurements?.blazerMeasurements ?? blazerData.measurements?.blazerMeasurement),
+      ...stripEmptyValues(blazerData),
+    };
+    const unifiedSherwani = {
+      ...stripEmptyValues(listData.sherwaniMeasurements ?? listData.sherwaniMeasuremet ?? listData.sherwaniMeasurement ?? listData.measurements?.sherwaniMeasurements ?? listData.measurements?.sherwaniMeasuremet ?? listData.measurements?.sherwaniMeasurement),
+      ...stripEmptyValues(genericData.sherwaniMeasurements ?? genericData.sherwaniMeasuremet ?? genericData.sherwaniMeasurement ?? genericData.measurements?.sherwaniMeasurements ?? genericData.measurements?.sherwaniMeasuremet ?? genericData.measurements?.sherwaniMeasurement),
+      ...stripEmptyValues(sherwaniData.sherwaniMeasurements ?? sherwaniData.sherwaniMeasuremet ?? sherwaniData.sherwaniMeasurement ?? sherwaniData.measurements?.sherwaniMeasurements ?? sherwaniData.measurements?.sherwaniMeasuremet ?? sherwaniData.measurements?.sherwaniMeasurement),
+      ...stripEmptyValues(sherwaniData),
+    };
 
     return normalizeCustomer({
       ...baseCustomer,
@@ -364,9 +425,15 @@ const CustomerList = () => {
         ...baseCustomer.pantMeasurements,
         ...normalizePantMeasurements(unifiedPant),
       },
+      jacketMeasurements: normalizeAdditionalMeasurements(unifiedJacket, jacketMeasurementFields, 'jacket'),
+      blazerMeasurements: normalizeAdditionalMeasurements(unifiedBlazer, blazerMeasurementFields, 'blazer'),
+      sherwaniMeasurements: normalizeAdditionalMeasurements(unifiedSherwani, sherwaniMeasurementFields, 'sherwani'),
       measurementNotes: {
         shirt: unifiedShirt.notes ?? baseCustomer.measurementNotes?.shirt ?? '',
         pant: unifiedPant.notes ?? baseCustomer.measurementNotes?.pant ?? '',
+        jacket: unifiedJacket.notes ?? '',
+        blazer: unifiedBlazer.notes ?? '',
+        sherwani: unifiedSherwani.notes ?? '',
       },
     });
   };
@@ -470,6 +537,11 @@ const CustomerList = () => {
       return;
     }
 
+    if (!/^\d{10}$/.test(normalizedSearch)) {
+      setFeedback({ type: 'error', message: 'Mobile number must contain exactly 10 digits.' });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await getCustomerByMobileNo(normalizedSearch);
@@ -527,6 +599,13 @@ const CustomerList = () => {
     setBalanceDialogOpen(false);
     setBalanceCustomer(null);
     setBalanceAmount('');
+  };
+
+  const handleBalanceDialogKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   };
 
   const handleSubmitBalanceUpdate = async () => {
@@ -603,6 +682,10 @@ const CustomerList = () => {
   const totalPages = Math.max(1, Math.ceil(customers.length / rowsPerPage));
   const pagedBalanceCustomers = balanceCustomers.slice((balancePage - 1) * rowsPerPage, balancePage * rowsPerPage);
   const totalBalancePages = Math.max(1, Math.ceil(balanceCustomers.length / rowsPerPage));
+  const totalCustomerBalance = balanceCustomers.reduce((total, customer) => {
+    const balance = Number(customer.balance);
+    return Number.isFinite(balance) ? total + balance : total;
+  }, 0);
   const pagedDeliveryCustomers = deliveryCustomers.slice((deliveryPage - 1) * rowsPerPage, deliveryPage * rowsPerPage);
   const totalDeliveryPages = Math.max(1, Math.ceil(deliveryCustomers.length / rowsPerPage));
 
@@ -707,8 +790,10 @@ const CustomerList = () => {
                   <TextField
                     label="Mobile Number"
                     value={mobileSearchValue}
-                    onChange={(event) => setMobileSearchValue(event.target.value)}
+                    onChange={(event) => setMobileSearchValue(event.target.value.replace(/\D/g, '').slice(0, 10))}
                     fullWidth
+                    type="tel"
+                    inputProps={{ inputMode: 'numeric', maxLength: 10, pattern: '[0-9]{10}' }}
                   />
                   <Button variant="outlined" onClick={handleFindCustomerByMobile} disabled={loading}>
                     {loading ? 'Loading...' : 'Find Customer'}
@@ -830,6 +915,30 @@ const CustomerList = () => {
                 <>
                   <Table size="small">
                     <TableHead>
+                      <TableRow>
+                        <TableCell colSpan={5} />
+                        <TableCell align="right" sx={{ borderBottom: 0 }}>
+                          <Box
+                            sx={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-end',
+                              bgcolor: 'primary.main',
+                              color: 'primary.contrastText',
+                              px: 2,
+                              py: 1,
+                              borderRadius: 1,
+                              minWidth: 190,
+                            }}
+                          >
+                            <Typography variant="caption">Total Balance</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                              {formatBalance(totalCustomerBalance)}
+                              
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
                       <TableRow>
                         <TableCell>ID</TableCell>
                         <TableCell>Name</TableCell>
@@ -964,7 +1073,7 @@ const CustomerList = () => {
         )}
       </Grid>
 
-      <Dialog open={balanceDialogOpen} onClose={handleCloseBalanceDialog} fullWidth maxWidth="xs">
+      <Dialog open={balanceDialogOpen} onClose={handleCloseBalanceDialog} onKeyDown={handleBalanceDialogKeyDown} fullWidth maxWidth="xs">
         <DialogTitle>Update Balence</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>

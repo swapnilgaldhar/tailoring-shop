@@ -1,3 +1,4 @@
+import JacketMeasurement from './jacketmeasurement.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -64,6 +65,18 @@ const measurementTypes = [
   { key: 'sherwani', label: 'Sherwani Measurement', formKey: 'sherwaniMeasurements', fields: sherwaniMeasurementFields },
 ];
 const FIXED_MEASUREMENT_ID = '101';
+const MEASUREMENT_VALUE_PATTERN = /^\d{1,2}(?:\.\d{1,2})?$/;
+
+const validateMeasurementValue = (value) => {
+  const normalizedValue = String(value ?? '').trim();
+  if (!normalizedValue) return '';
+
+  if (!MEASUREMENT_VALUE_PATTERN.test(normalizedValue) || Number(normalizedValue) > 99.99) {
+    return 'Enter a value from 0 to 99.99.';
+  }
+
+  return '';
+};
 
 const parseJsonIfString = (payload) => {
   if (typeof payload !== 'string') return payload;
@@ -132,7 +145,14 @@ const pickMeasurementValue = (source = {}, aliases = []) => {
     const contained = entries.find(([key]) => normalizeLookupKey(key).includes(alias));
     if (contained) {
       const value = sanitizeMeasurementValue(contained[1]);
-      if (value !== '') return value;
+      if (value !== '' && (typeof value !== 'object' || value === null)) return value;
+    }
+  }
+
+  for (const [, value] of entries) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nestedValue = pickMeasurementValue(value, aliases);
+      if (nestedValue !== '') return nestedValue;
     }
   }
 
@@ -172,10 +192,15 @@ const getMeasurementNoteByTab = (measurement = {}, customer = {}, activeTab = 0)
   const customerTabNote = sanitizeMeasurementValue(customer?.measurementNotes?.[tabKey]);
   if (customerTabNote !== '') return customerTabNote;
 
-  const sharedNote = sanitizeMeasurementValue(measurement?.notes);
-  if (sharedNote !== '') return sharedNote;
-
   return 'No notes added for this measurement profile.';
+};
+
+const getMeasurementNote = (source = {}, typeKey, allowLegacyNote = false) => {
+  const root = unwrapMeasurementPayload(source);
+  const scopedNote = sanitizeMeasurementValue(root.measurementNotes?.[typeKey]);
+  if (scopedNote !== '') return scopedNote;
+
+  return allowLegacyNote ? sanitizeMeasurementValue(root.notes) : '';
 };
 
 const unwrapMeasurementPayload = (payload = {}) => {
@@ -245,7 +270,7 @@ const normalizeCustomer = (customer = {}) => {
       ),
     },
     jacketMeasurements: normalizeMeasurementFields(
-      safeCustomer.jacketMeasurements ?? safeCustomer.jacketMeasuremet ?? safeCustomer.jacketMeasurement ?? safeCustomer.measurements?.jacketMeasurements ?? safeCustomer.measurements?.jacketMeasuremet ?? safeCustomer.measurements?.jacketMeasurement ?? safeCustomer.measurement?.jacketMeasurements ?? safeCustomer.measurement?.jacketMeasuremet ?? safeCustomer.measurement?.jacketMeasurement ?? {},
+      { ...safeCustomer, ...resolveMeasurementMap(safeCustomer.jacketMeasurements ?? safeCustomer.jacketMeasuremet ?? safeCustomer.jacketMeasurement ?? safeCustomer.measurements?.jacketMeasurements ?? safeCustomer.measurements?.jacketMeasuremet ?? safeCustomer.measurements?.jacketMeasurement ?? safeCustomer.measurement?.jacketMeasurements ?? safeCustomer.measurement?.jacketMeasuremet ?? safeCustomer.measurement?.jacketMeasurement ?? {}) },
       jacketMeasurementFields,
     ),
     blazerMeasurements: normalizeMeasurementFields(
@@ -256,14 +281,14 @@ const normalizeCustomer = (customer = {}) => {
       safeCustomer.sherwaniMeasurements ?? safeCustomer.sherwaniMeasuremet ?? safeCustomer.sherwaniMeasurement ?? safeCustomer.measurements?.sherwaniMeasurements ?? safeCustomer.measurements?.sherwaniMeasuremet ?? safeCustomer.measurements?.sherwaniMeasurement ?? safeCustomer.measurement?.sherwaniMeasurements ?? safeCustomer.measurement?.sherwaniMeasuremet ?? safeCustomer.measurement?.sherwaniMeasurement ?? {},
       sherwaniMeasurementFields,
     ),
-    measurementNotes: unwrapMeasurementPayload(safeCustomer.measurementNotes ?? { shirt: safeCustomer.notes ?? '', pant: safeCustomer.notes ?? '' }),
+    measurementNotes: unwrapMeasurementPayload(safeCustomer.measurementNotes ?? { shirt: safeCustomer.notes ?? '' }),
   };
 };
 
 const coalesceMeasurementSource = (...sources) => {
   for (const source of sources) {
     const candidate = unwrapMeasurementPayload(source ?? {});
-    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length > 0) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.values(candidate).some((value) => value !== null && value !== undefined && String(value).trim() !== '')) {
       return candidate;
     }
   }
@@ -339,6 +364,7 @@ const extractMeasurementRecords = (payload) => {
 
 const normalizeMeasurement = (measurement = {}) => {
   const root = unwrapMeasurementPayload(measurement);
+  const rootNotes = unwrapMeasurementPayload(root.measurementNotes ?? {});
   const shirtSource = resolveMeasurementMap(
     root.shirtMeasurements ?? root.shirtMeasuremet ?? root.shirtMeasurement ?? root.measurements?.shirtMeasurements ?? root.measurements?.shirtMeasuremet ?? root.measurements?.shirtMeasurement ?? root.measurement?.shirtMeasurements ?? root.measurement?.shirtMeasuremet ?? root.measurement?.shirtMeasurement ?? {}
   );
@@ -355,17 +381,44 @@ const normalizeMeasurement = (measurement = {}) => {
     customerName: root.customerName ?? root.customer?.name ?? '',
     shirtMeasurements: normalizeShirtMeasurements({ ...root, ...shirtSource }),
     pantMeasurements: normalizePantMeasurements({ ...root, ...pantSource }),
-    jacketMeasurements: normalizeMeasurementFields(jacketSource, jacketMeasurementFields),
+    jacketMeasurements: normalizeMeasurementFields(jacketSource, jacketMeasurementFields, 'jacket'),
     blazerMeasurements: normalizeMeasurementFields(blazerSource, blazerMeasurementFields),
     sherwaniMeasurements: normalizeMeasurementFields(sherwaniSource, sherwaniMeasurementFields),
-    notes: root.notes ?? root.measurementNotes?.shirt ?? root.measurementNotes?.pant ?? '',
+    measurementNotes: {
+      shirt: rootNotes.shirt ?? shirtSource.notes ?? '',
+      pant: rootNotes.pant ?? pantSource.notes ?? '',
+      jacket: rootNotes.jacket ?? jacketSource.notes ?? '',
+      blazer: rootNotes.blazer ?? blazerSource.notes ?? '',
+      sherwani: rootNotes.sherwani ?? sherwaniSource.notes ?? '',
+    },
   };
 };
 
-const normalizeMeasurementFields = (measurement = {}, fields) => {
+const normalizeMeasurementFields = (measurement = {}, fields, measurementType = '') => {
   const root = unwrapMeasurementPayload(measurement);
+  const nestedSource = measurementType
+    ? Object.entries(root).find(([key, value]) => normalizeLookupKey(key).includes(measurementType) && value && typeof value === 'object')?.[1]
+    : null;
+  const source = nestedSource && typeof nestedSource === 'object'
+    ? { ...root, ...unwrapMeasurementPayload(nestedSource) }
+    : root;
   return fields.reduce((values, field) => {
-    values[field.key] = pickMeasurementValue(root, [field.key]);
+    const aliases = [field.key];
+    if (measurementType) {
+      aliases.push(`${measurementType}${field.key.charAt(0).toUpperCase()}${field.key.slice(1)}`);
+    }
+    if (measurementType === 'jacket') {
+      const jacketAliases = {
+        length: ['jacketLength', 'jacket_length', 'height'],
+        chest: ['jacketChest', 'jacket_chest'],
+        waist: ['jacketWaist', 'jacket_waist'],
+        hip: ['jacketHip', 'jacket_hip'],
+        shoulder: ['jacketShoulder', 'jacket_shoulder'],
+        standCollar: ['jacketStandCollar', 'jacket_stand_collar', 'jacketStand', 'standCollar', 'stand'],
+      };
+      aliases.push(...(jacketAliases[field.key] || []));
+    }
+    values[field.key] = pickMeasurementValue(source, aliases);
     return values;
   }, {});
 };
@@ -415,6 +468,7 @@ const normalizePantMeasurements = (measurement = {}) => {
     waist: pickMeasurementValue(source, ['pantWaist', 'pant_waist', 'waist', 'pantwaist', 'waistSize', 'kamar', 'kambar']),
     hip: pickMeasurementValue(source, ['hip']),
     thigh: pickMeasurementValue(source, ['thigh']),
+    chainFly: pickMeasurementValue(source, ['chainFly', 'chain_fly', 'chainfly', 'pantChainFly', 'pant_chain_fly', 'chainFlyLength']),
     knee: pickMeasurementValue(source, ['knee']),
     calf: pickMeasurementValue(source, ['calf']),
     bottom: pickMeasurementValue(source, ['bottom']),
@@ -457,7 +511,7 @@ const buildFormFromCustomer = (customer = {}, measurement = {}) => ({
     accumulator[field] = measurement.sherwaniMeasurements?.[field] ?? customer.sherwaniMeasurements?.[field] ?? '';
     return accumulator;
   }, {}),
-  notes: measurement.notes ?? '',
+  notes: measurement.measurementNotes?.shirt ?? measurement.notes ?? '',
 });
 
 const buildMeasurementPayload = (formData, customer = null) => {
@@ -486,7 +540,6 @@ const buildMeasurementPayload = (formData, customer = null) => {
     jacketMeasurements,
     blazerMeasurements,
     sherwaniMeasurements,
-    notes: toTrimmedString(formData.notes),
     neck: shirtMeasurements.neck,
     chest: shirtMeasurements.chest,
     waist: shirtMeasurements.waist,
@@ -499,27 +552,30 @@ const buildMeasurementPayload = (formData, customer = null) => {
     shirtHip: shirtMeasurements.hip,
     pantWaist: pantMeasurements.waist,
     pantLength: pantMeasurements.length,
+    pantMeasurement: { ...pantMeasurements },
+    pantMeasuremet: { ...pantMeasurements },
+    pantLengthValue: pantMeasurements.length,
+    pantWaistValue: pantMeasurements.waist,
     hip: pantMeasurements.hip,
     thigh: pantMeasurements.thigh,
     knee: pantMeasurements.knee,
     calf: pantMeasurements.calf,
     bottom: pantMeasurements.bottom,
-    chest: jacketMeasurements.chest,
-    waist: jacketMeasurements.waist,
-    shoulder: jacketMeasurements.shoulder,
-    sleeve: jacketMeasurements.sleeve,
-    length: jacketMeasurements.length,
-    chest: blazerMeasurements.chest,
-    waist: blazerMeasurements.waist,
-    shoulder: blazerMeasurements.shoulder,
-    sleeve: blazerMeasurements.sleeve,
-    length: blazerMeasurements.length,
-    chest: sherwaniMeasurements.chest,
-    waist: sherwaniMeasurements.waist,
-    shoulder: sherwaniMeasurements.shoulder,
-    sleeve: sherwaniMeasurements.sleeve,
-    length: sherwaniMeasurements.length,
-    
+    jacketChest: jacketMeasurements.chest,
+    jacketWaist: jacketMeasurements.waist,
+    jacketShoulder: jacketMeasurements.shoulder,
+    jacketSleeve: jacketMeasurements.sleeve,
+    jacketLength: jacketMeasurements.length,
+    blazerChest: blazerMeasurements.chest,
+    blazerWaist: blazerMeasurements.waist,
+    blazerShoulder: blazerMeasurements.shoulder,
+    blazerSleeve: blazerMeasurements.sleeve,
+    blazerLength: blazerMeasurements.length,
+    sherwaniChest: sherwaniMeasurements.chest,
+    sherwaniWaist: sherwaniMeasurements.waist,
+    sherwaniShoulder: sherwaniMeasurements.shoulder,
+    sherwaniSleeve: sherwaniMeasurements.sleeve,
+    sherwaniLength: sherwaniMeasurements.length,
   };
 };
 
@@ -535,9 +591,12 @@ const buildShirtMeasurementPayload = (formData, customer = null) => ({
         address: customer.address,
       }
     : undefined,
-  shirtMeasurement: { ...formData.shirtMeasurements },
+  shirtMeasurement: {
+    ...formData.shirtMeasurements,
+    notes: toTrimmedString(formData.notes),
+  },
   ...formData.shirtMeasurements,
-  notes: toTrimmedString(formData.notes),
+  measurementNotes: { shirt: toTrimmedString(formData.notes) },
 });
 
 const buildPantMeasurementPayload = (formData, customer = null) => ({
@@ -552,15 +611,26 @@ const buildPantMeasurementPayload = (formData, customer = null) => ({
         address: customer.address,
       }
     : undefined,
-  pantMeasuremet: { ...formData.pantMeasurements },
+  pantMeasurement: {
+    ...formData.pantMeasurements,
+    notes: toTrimmedString(formData.notes),
+  },
+  pantMeasuremet: {
+    ...formData.pantMeasurements,
+    notes: toTrimmedString(formData.notes),
+  },
   pantLength: formData.pantMeasurements.length,
   pantWaist: formData.pantMeasurements.waist,
+  length: formData.pantMeasurements.length,
+  waist: formData.pantMeasurements.waist,
   hip: formData.pantMeasurements.hip,
   thigh: formData.pantMeasurements.thigh,
   knee: formData.pantMeasurements.knee,
   calf: formData.pantMeasurements.calf,
   bottom: formData.pantMeasurements.bottom,
-  notes: toTrimmedString(formData.notes),
+  chainFly: formData.pantMeasurements.chainFly ?? '',
+  measurementNotes: { pant: toTrimmedString(formData.notes) },
+  ...formData.pantMeasurements,
 });
 
 const buildTypedMeasurementPayload = (type, formData, customer = null) => {
@@ -570,8 +640,7 @@ const buildTypedMeasurementPayload = (type, formData, customer = null) => {
     ...values,
     notes,
   };
-
-  return {
+  const response = {
     customerId: toTrimmedString(formData.customerId),
     custId: toTrimmedString(formData.customerId),
     customerName: toTrimmedString(formData.customerName),
@@ -580,8 +649,19 @@ const buildTypedMeasurementPayload = (type, formData, customer = null) => {
       : undefined,
     [measurementBackendKeys[type.formKey]]: backendMeasurement,
     ...values,
-    notes,
+    measurementNotes: { [type.key]: notes },
   };
+
+  if (type.formKey === 'pantMeasurements') {
+    response.pantMeasurement = backendMeasurement;
+    response.pantMeasuremet = backendMeasurement;
+    response.length = values.length ?? '';
+    response.waist = values.waist ?? '';
+    response.pantLength = values.length ?? '';
+    response.pantWaist = values.waist ?? '';
+  }
+
+  return response;
 };
 
 const hasMeasurementValues = (customer = {}) =>
@@ -620,6 +700,7 @@ const MeasurementPage = () => {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [measurementErrors, setMeasurementErrors] = useState({});
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -723,7 +804,7 @@ const MeasurementPage = () => {
 
     const customerShirt = coalesceMeasurementSource(customer?.shirtMeasurements, customer?.shirtMeasurement, customer?.measurements?.shirtMeasurements, customer?.measurements?.shirtMeasurement, customer?.measurement?.shirtMeasurements, customer?.measurement?.shirtMeasurement, genericData.shirtMeasurements, genericData.shirtMeasurement, shirtData.shirtMeasurements, shirtData.shirtMeasurement, listData.shirtMeasurements, listData.shirtMeasurement);
     const customerPant = coalesceMeasurementSource(customer?.pantMeasurements, customer?.pantMeasurement, customer?.measurements?.pantMeasurements, customer?.measurements?.pantMeasurement, customer?.measurement?.pantMeasurements, customer?.measurement?.pantMeasurement, genericData.pantMeasurements, genericData.pantMeasurement, pantData.pantMeasurements, pantData.pantMeasurement, listData.pantMeasurements, listData.pantMeasurement);
-    const customerJacket = coalesceMeasurementSource(customer?.jacketMeasurements, customer?.jacketMeasurement, genericData.jacketMeasurements, genericData.jacketMeasurement, jacketData.jacketMeasurements, jacketData.jacketMeasurement, listData.jacketMeasurements, listData.jacketMeasurement);
+    const customerJacket = coalesceMeasurementSource(customer?.jacketMeasurements, customer?.jacketMeasuremet, customer?.jacketMeasurement, customer?.measurements?.jacketMeasurements, customer?.measurements?.jacketMeasuremet, customer?.measurements?.jacketMeasurement, genericData.jacketMeasurements, genericData.jacketMeasuremet, genericData.jacketMeasurement, jacketData.jacketMeasurements, jacketData.jacketMeasuremet, jacketData.jacketMeasurement, listData.jacketMeasurements, listData.jacketMeasuremet, listData.jacketMeasurement);
     const customerBlazer = coalesceMeasurementSource(customer?.blazerMeasurements, customer?.blazerMeasurement, genericData.blazerMeasurements, genericData.blazerMeasurement, blazerData.blazerMeasurements, blazerData.blazerMeasurement, listData.blazerMeasurements, listData.blazerMeasurement);
     const customerSherwani = coalesceMeasurementSource(customer?.sherwaniMeasurements, customer?.sherwaniMeasurement, genericData.sherwaniMeasurements, genericData.sherwaniMeasurement, sherwaniData.sherwaniMeasurements, sherwaniData.sherwaniMeasurement, listData.sherwaniMeasurements, listData.sherwaniMeasurement);
 
@@ -760,10 +841,16 @@ const MeasurementPage = () => {
       customerName: customer.name || '',
       shirtMeasurements: normalizeShirtMeasurements(unifiedShirt),
       pantMeasurements: normalizePantMeasurements(unifiedPant),
-      jacketMeasurements: normalizeMeasurementFields(unifiedJacket, jacketMeasurementFields),
+      jacketMeasurements: normalizeMeasurementFields(unifiedJacket, jacketMeasurementFields, 'jacket'),
       blazerMeasurements: normalizeMeasurementFields(unifiedBlazer, blazerMeasurementFields),
       sherwaniMeasurements: normalizeMeasurementFields(unifiedSherwani, sherwaniMeasurementFields),
-      notes: unifiedShirt.notes ?? unifiedPant.notes ?? listData.notes ?? genericData.notes ?? shirtData.notes ?? pantData.notes ?? '',
+      measurementNotes: {
+        shirt: getMeasurementNote(shirtData, 'shirt', true) || getMeasurementNote(genericData, 'shirt') || getMeasurementNote(listData, 'shirt'),
+        pant: getMeasurementNote(pantData, 'pant', true) || getMeasurementNote(genericData, 'pant') || getMeasurementNote(listData, 'pant'),
+        jacket: getMeasurementNote(jacketData, 'jacket', true) || getMeasurementNote(genericData, 'jacket') || getMeasurementNote(listData, 'jacket'),
+        blazer: getMeasurementNote(blazerData, 'blazer', true) || getMeasurementNote(genericData, 'blazer') || getMeasurementNote(listData, 'blazer'),
+        sherwani: getMeasurementNote(sherwaniData, 'sherwani', true) || getMeasurementNote(genericData, 'sherwani') || getMeasurementNote(listData, 'sherwani'),
+      },
     });
 
     measurement = {
@@ -776,7 +863,7 @@ const MeasurementPage = () => {
         measurement.pantMeasurements,
         normalizePantMeasurements(customer?.pantMeasurements ?? {}),
       ),
-      jacketMeasurements: mergeMissingMeasurementValues(measurement.jacketMeasurements, normalizeMeasurementFields(customer?.jacketMeasurements ?? {}, jacketMeasurementFields)),
+      jacketMeasurements: mergeMissingMeasurementValues(measurement.jacketMeasurements, normalizeMeasurementFields(customer?.jacketMeasurements ?? {}, jacketMeasurementFields, 'jacket')),
       blazerMeasurements: mergeMissingMeasurementValues(measurement.blazerMeasurements, normalizeMeasurementFields(customer?.blazerMeasurements ?? {}, blazerMeasurementFields)),
       sherwaniMeasurements: mergeMissingMeasurementValues(measurement.sherwaniMeasurements, normalizeMeasurementFields(customer?.sherwaniMeasurements ?? {}, sherwaniMeasurementFields)),
     };
@@ -895,6 +982,11 @@ const MeasurementPage = () => {
     const measurementType = measurementTypes.find((type) => name.startsWith(`${type.formKey}.`));
     if (measurementType) {
       const key = name.split('.')[1];
+      const error = validateMeasurementValue(value);
+      setMeasurementErrors((previous) => ({
+        ...previous,
+        [name]: error,
+      }));
       setFormData((prev) => ({
         ...prev,
         [measurementType.formKey]: {
@@ -913,6 +1005,7 @@ const MeasurementPage = () => {
 
   const handleMeasurementTypeChange = (_, value) => {
     setActiveFormMeasurementTab(value);
+    setMeasurementErrors({});
     setFormData((previous) => ({
       ...buildEmptyForm(),
       customerId: previous.customerId,
@@ -922,6 +1015,7 @@ const MeasurementPage = () => {
 
   const beginNewMeasurement = () => {
     setFormData(buildEmptyForm());
+    setMeasurementErrors({});
     setActiveFormMeasurementTab(0);
     setSelectedCustomer(null);
     setSelectedMeasurement(null);
@@ -936,6 +1030,20 @@ const MeasurementPage = () => {
 
     if (!customerId) {
       setFeedback({ type: 'error', message: 'Customer ID is required.' });
+      return;
+    }
+
+    const selectedType = measurementTypes[activeFormMeasurementTab];
+    const validationErrors = selectedType.fields.reduce((errors, field) => {
+      const fieldName = `${selectedType.formKey}.${field.key}`;
+      const error = validateMeasurementValue(formData[selectedType.formKey][field.key]);
+      if (error) errors[fieldName] = error;
+      return errors;
+    }, {});
+
+    if (Object.keys(validationErrors).length > 0) {
+      setMeasurementErrors(validationErrors);
+      setFeedback({ type: 'error', message: 'Please enter valid measurement values from 0 to 99.99.' });
       return;
     }
 
@@ -960,10 +1068,17 @@ const MeasurementPage = () => {
         }
       }
 
-      const selectedType = measurementTypes[activeFormMeasurementTab];
+      const selectedMeasurementValues = {
+        ...measurementFormData[selectedType.formKey],
+        notes: toTrimmedString(measurementFormData.notes),
+      };
       const mergedPayload = {
         ...buildMeasurementPayload(measurementFormData, customerForPayload),
-        [selectedType.formKey]: measurementFormData[selectedType.formKey],
+        [selectedType.formKey]: selectedMeasurementValues,
+        measurementNotes: {
+          ...(selectedMeasurement?.measurementNotes || {}),
+          [selectedType.key]: toTrimmedString(measurementFormData.notes),
+        },
       };
       const saveMeasurement = [
         (data) => createShirtMeasurement(buildShirtMeasurementPayload(data, customerForPayload)),
@@ -1027,13 +1142,22 @@ const MeasurementPage = () => {
           jacketMeasurements: activeFormMeasurementTab === 2 ? { ...measurementFormData.jacketMeasurements } : base.jacketMeasurements,
           blazerMeasurements: activeFormMeasurementTab === 3 ? { ...measurementFormData.blazerMeasurements } : base.blazerMeasurements,
           sherwaniMeasurements: activeFormMeasurementTab === 4 ? { ...measurementFormData.sherwaniMeasurements } : base.sherwaniMeasurements,
-          notes: measurementFormData.notes,
+          measurementNotes: {
+            ...(base.measurementNotes || {}),
+            [selectedType.key]: measurementFormData.notes,
+          },
         };
       });
     } catch (error) {
+      const responseData = error?.response?.data;
+      const serverMessage =
+        responseData?.message ||
+        responseData?.error ||
+        (typeof responseData === 'string' ? responseData : '') ||
+        error?.message;
       setFeedback({
         type: 'error',
-        message: error?.response?.data?.message || 'Unable to save measurement.',
+        message: serverMessage || 'Unable to save measurement.',
       });
     } finally {
       setSaving(false);
@@ -1051,13 +1175,10 @@ const MeasurementPage = () => {
             Measurements
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            View all customers, open a single customer by ID, and maintain one shirt and one pant measurement profile per customer.
+            View all customers,Maintain Shirt, Pant, Jacket, Blazer, Sherwani Measurement profile per customer.
           </Typography>
         </Box>
-       {/* <Button variant="contained" startIcon={<AddIcon />} onClick={beginNewMeasurement}>
-          New Customer Measurement
-        </Button> 
-        */}
+      
 
       </Stack>
 
@@ -1212,24 +1333,35 @@ const MeasurementPage = () => {
 
               <Divider />
 
-              <Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                  {activeFormType.label}s
-                </Typography>
-                <Grid container spacing={2}>
-                  {activeFormType.fields.map((field) => (
-                    <Grid item xs={12} sm={6} md={4} key={field.key}>
-                      <TextField
-                        label={getMeasurementFieldLabel(field)}
-                        name={`${activeFormType.formKey}.${field.key}`}
-                        value={formData[activeFormType.formKey][field.key]}
-                        onChange={handleFieldChange}
-                        fullWidth
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
+              {activeFormType.key === 'jacket' ? (
+                <JacketMeasurement
+                  formData={formData}
+                  measurementErrors={measurementErrors}
+                  onFieldChange={handleFieldChange}
+                />
+              ) : (
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                    {activeFormType.label}s
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {activeFormType.fields.map((field) => (
+                      <Grid item xs={12} sm={6} md={4} key={field.key}>
+                        <TextField
+                          label={getMeasurementFieldLabel(field)}
+                          name={`${activeFormType.formKey}.${field.key}`}
+                          value={formData[activeFormType.formKey][field.key]}
+                          onChange={handleFieldChange}
+                          error={Boolean(measurementErrors[`${activeFormType.formKey}.${field.key}`])}
+                          helperText={measurementErrors[`${activeFormType.formKey}.${field.key}`]}
+                          inputProps={{ inputMode: 'decimal' }}
+                          fullWidth
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
 
               <TextField
                 label="Notes"
