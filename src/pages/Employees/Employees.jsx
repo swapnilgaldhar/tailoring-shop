@@ -31,6 +31,8 @@ import {
 } from '../../services/employeeApi';
 
 const rowsPerPage = 20;
+const mobileNumberPattern = /^\d{10}$/;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const parseJsonIfString = (payload) => {
   if (typeof payload !== 'string') return payload;
@@ -100,6 +102,7 @@ const buildKaragirPayload = (form) => ({
   karagirPhone: form.mobileNumber.trim(),
   karagirAddress: form.address.trim(),
   karagirSpeciality: form.speciality.trim(),
+  karagirEmail: form.email.trim(),
 });
 
 const initialEmployeeForm = {
@@ -115,6 +118,7 @@ const initialKaragirForm = {
   mobileNumber: '',
   address: '',
   speciality: '',
+  email: '',
 };
 
 const Employees = () => {
@@ -191,6 +195,14 @@ const Employees = () => {
       setFeedback({ type: 'error', message: 'Employee name and mobile number are required.' });
       return;
     }
+    if (!mobileNumberPattern.test(employeeForm.mobileNumber.trim())) {
+      setFeedback({ type: 'error', message: 'Employee mobile number must contain exactly 10 digits.' });
+      return;
+    }
+    if (employeeForm.email.trim() && !emailPattern.test(employeeForm.email.trim())) {
+      setFeedback({ type: 'error', message: 'Enter a valid employee email address.' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -211,6 +223,14 @@ const Employees = () => {
     event.preventDefault();
     if (!karagirForm.name.trim() || !karagirForm.mobileNumber.trim()) {
       setFeedback({ type: 'error', message: 'Karagir name and mobile number are required.' });
+      return;
+    }
+    if (!mobileNumberPattern.test(karagirForm.mobileNumber.trim())) {
+      setFeedback({ type: 'error', message: 'Karagir mobile number must contain exactly 10 digits.' });
+      return;
+    }
+    if (karagirForm.email.trim() && !emailPattern.test(karagirForm.email.trim())) {
+      setFeedback({ type: 'error', message: 'Enter a valid karagir email address.' });
       return;
     }
 
@@ -359,7 +379,12 @@ const Employees = () => {
                     <TextField
                       label="Mobile Number"
                       value={employeeForm.mobileNumber}
-                      onChange={(event) => setEmployeeForm((prev) => ({ ...prev, mobileNumber: event.target.value }))}
+                      onChange={(event) => setEmployeeForm((prev) => ({
+                        ...prev,
+                        mobileNumber: event.target.value.replace(/\D/g, '').slice(0, 10),
+                      }))}
+                      type="tel"
+                      inputProps={{ inputMode: 'numeric', maxLength: 10 }}
                       required
                       fullWidth
                     />
@@ -373,6 +398,7 @@ const Employees = () => {
                       label="Employee Email"
                       value={employeeForm.email}
                       onChange={(event) => setEmployeeForm((prev) => ({ ...prev, email: event.target.value }))}
+                      type="email"
                       fullWidth
                     />
                     <TextField
@@ -504,8 +530,20 @@ const Employees = () => {
                     <TextField
                       label="Mobile Number"
                       value={karagirForm.mobileNumber}
-                      onChange={(event) => setKaragirForm((prev) => ({ ...prev, mobileNumber: event.target.value }))}
+                      onChange={(event) => setKaragirForm((prev) => ({
+                        ...prev,
+                        mobileNumber: event.target.value.replace(/\D/g, '').slice(0, 10),
+                      }))}
+                      type="tel"
+                      inputProps={{ inputMode: 'numeric', maxLength: 10 }}
                       required
+                      fullWidth
+                    />
+                    <TextField
+                      label="Karagir Email"
+                      value={karagirForm.email}
+                      onChange={(event) => setKaragirForm((prev) => ({ ...prev, email: event.target.value }))}
+                      type="email"
                       fullWidth
                     />
                     <TextField

@@ -3,6 +3,10 @@ import {
   Alert,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   InputAdornment,
@@ -21,12 +25,13 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import PrintIcon from '@mui/icons-material/Print';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import EditIcon from '@mui/icons-material/Edit';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import dayjs from 'dayjs';
 import { getCustomerById } from '../../services/api';
-import { createBill, getBillById } from '../../services/billingApi';
+import { createBill, getBillById, getBillsByCustomerId } from '../../services/billingApi';
 import PageTabs from '../../components/common/PageTabs';
 
 const ITEM_OPTIONS = [
@@ -34,7 +39,9 @@ const ITEM_OPTIONS = [
   'Shirting',
   'Pant Stitching',
   'Shirt Stitching',
-  'Blazer',
+  'Blazer Stitching',
+  'Jacket Stitching',
+  'Sherwani Stitching',
   'Alteration',
   'Sherwani',
   'Safari',
@@ -42,6 +49,10 @@ const ITEM_OPTIONS = [
 ];
 
 const PAYMENT_TYPES = ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Credit'];
+const DISCOUNTABLE_ITEMS = new Set(['Suiting', 'Shirting']);
+const SHOP_NAME = 'FIRST IMPRESSION Tailoring & Premium Colletion';
+const SHOP_ADDRESS = 'Branch: 1.Bhosari. 2.Charholi Bhata, Alandi Road.';
+const SHOP_BRANDS = ['Raymond', 'GRADO', "Siyaram's", 'D & J', 'LINEN Club', 'Armani'];
 
 const createEmptyItem = () => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -71,6 +82,8 @@ const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const isDiscountableItem = (item) => DISCOUNTABLE_ITEMS.has(item);
 
 const normalizePhoneForWhatsApp = (phone = '') => {
   const digits = String(phone).replace(/\D/g, '');
@@ -104,29 +117,78 @@ const getFirstValue = (source, keys, fallback = '-') => {
   return value ?? fallback;
 };
 
-const extractBillNumberFromResponse = (responseData) => {
-  const candidateSources = [
-    responseData,
-    responseData?.data,
-    responseData?.result,
-    responseData?.payload,
-    responseData?.bill,
-    responseData?.billDetails,
-  ];
+const extractBills = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
 
-  for (const source of candidateSources) {
-    if (!source || typeof source !== 'object') continue;
-    const value = getFirstValue(
-      source,
-      ['billNumber', 'billNo', 'billnumber', 'bill_no', 'billId', 'invoiceNumber', 'invoiceNo', 'id'],
-      '',
-    );
-    if (value !== '' && value !== '-') {
-      return String(value);
+  const bills =
+    payload.bills ??
+    payload.data ??
+    payload.content ??
+    payload.items ??
+    payload.results ??
+    payload.list;
+
+  return Array.isArray(bills) ? bills : [];
+};
+
+const getDiscountAmount = (bill) => getFirstValue(bill, ['discountAmount', 'discount'], 0);
+
+const getDiscountPercent = (bill) =>
+  getFirstValue(bill, ['discountPer', 'discountPercent', 'discountPercentage'], 0);
+
+const extractBillNumberFromResponse = (responseData, responseHeaders = {}) => {
+  let normalizedResponse = responseData;
+  if (typeof normalizedResponse === 'string') {
+    try {
+      normalizedResponse = JSON.parse(normalizedResponse);
+    } catch {
+      const plainTextBillNumber = normalizedResponse.trim();
+      return /^\d+$/.test(plainTextBillNumber) ? plainTextBillNumber : '';
     }
   }
 
-  return '';
+  const billNumberKeys = [
+    'billNumber',
+    'billNo',
+    'billnumber',
+    'bill_number',
+    'billId',
+    'invoiceNumber',
+    'invoiceNo',
+  ];
+  const primitiveWrapperKeys = ['data', 'result', 'payload', 'bill', 'billDetails', 'invoice'];
+
+  const findBillNumber = (value, allowPrimitive = false) => {
+    if (value == null) return '';
+    if (typeof value !== 'object') return allowPrimitive ? String(value) : '';
+    if (Array.isArray(value)) {
+      return value.map((item) => findBillNumber(item, true)).find(Boolean) || '';
+    }
+
+    const directValue = getFirstValue(value, billNumberKeys, '');
+    if (directValue !== '' && directValue !== '-') return String(directValue);
+
+    return Object.entries(value)
+      .map(([key, item]) => {
+        const matchingKey = billNumberKeys.find((billKey) => billKey.toLowerCase() === key.toLowerCase());
+        if (matchingKey && item != null && item !== '') return String(item);
+        return findBillNumber(item, primitiveWrapperKeys.includes(key));
+      })
+      .find(Boolean) || '';
+  };
+
+  const billNumber = findBillNumber(normalizedResponse, true);
+  if (billNumber) return billNumber;
+
+  const location = responseHeaders.location || responseHeaders.Location || '';
+  const locationMatch = String(location).match(/(?:bill|invoice)[^/]*\/([^/?#]+)/i);
+  if (locationMatch?.[1]) return decodeURIComponent(locationMatch[1]);
+
+  // Some APIs return the created bill as an object with only an id.
+  return normalizedResponse && typeof normalizedResponse === 'object' && !Array.isArray(normalizedResponse)
+    ? String(normalizedResponse.id ?? '')
+    : '';
 };
 
 const blobFromCanvas = (canvas) =>
@@ -192,12 +254,13 @@ const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
 
   drawRoundedRect(ctx, 60, 40, canvasWidth - 120, cardHeight, 34, '#ffffff');
 
-  ctx.fillStyle = '#1d4ed8';
-  ctx.font = '700 42px Arial';
-  ctx.fillText('Tailoring Shop', 110, 120);
+  ctx.fillStyle = '#D4AF37';
+  ctx.font = '700 34px Arial';
+  ctx.fillText(SHOP_NAME, 110, 116);
   ctx.fillStyle = '#64748b';
   ctx.font = '500 24px Arial';
-  ctx.fillText('Bill Receipt', 110, 158);
+  ctx.fillText(SHOP_ADDRESS, 110, 152);
+  ctx.fillText('Bill Receipt', 110, 184);
 
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 24px Arial';
@@ -207,25 +270,25 @@ const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
   ctx.strokeStyle = '#dbe6f5';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(100, 190);
-  ctx.lineTo(canvasWidth - 100, 190);
+  ctx.moveTo(100, 214);
+  ctx.lineTo(canvasWidth - 100, 214);
   ctx.stroke();
 
   ctx.fillStyle = '#334155';
   ctx.font = '600 22px Arial';
-  ctx.fillText(`Customer: ${customer?.name || '-'}`, 110, 242);
-  ctx.fillText(`Mobile: ${customer?.mobileNumber || '-'}`, 110, 278);
-  ctx.fillText(`Payment: ${payload.paymentMode || '-'}`, 110, 314);
+  ctx.fillText(`Customer: ${customer?.name || '-'}`, 110, 266);
+  ctx.fillText(`Mobile: ${customer?.mobileNumber || '-'}`, 110, 302);
+  ctx.fillText(`Payment: ${payload.paymentMode || '-'}`, 110, 338);
 
   const totalsX = 690;
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 22px Arial';
-  ctx.fillText(`Total: Rs ${formatCurrency(payload.totalAmount || 0)}`, totalsX, 242);
-  ctx.fillText(`Paid: Rs ${formatCurrency(payload.paidAmount || 0)}`, totalsX, 278);
+  ctx.fillText(`Total: Rs ${formatCurrency(payload.totalAmount || 0)}`, totalsX, 266);
+  ctx.fillText(`Paid: Rs ${formatCurrency(payload.paidAmount || 0)}`, totalsX, 302);
   ctx.fillStyle = '#dc2626';
-  ctx.fillText(`Balance: Rs ${formatCurrency(payload.balanceAmount || 0)}`, totalsX, 314);
+  ctx.fillText(`Balance: Rs ${formatCurrency(payload.balanceAmount || 0)}`, totalsX, 338);
 
-  const tableTop = 360;
+  const tableTop = 384;
   drawRoundedRect(ctx, 100, tableTop, canvasWidth - 200, 56, 12, '#eef5ff');
   ctx.fillStyle = '#1e3a8a';
   ctx.font = '700 20px Arial';
@@ -267,7 +330,8 @@ const buildBillReceiptPng = async ({ billNumber, payload, customer }) => {
 
   ctx.fillStyle = '#64748b';
   ctx.font = '500 18px Arial';
-  ctx.fillText('Generated from Tailoring Shop Billing', 110, canvasHeight - 28);
+  ctx.fillText(`Brands available: ${SHOP_BRANDS.join(', ')}`, 110, canvasHeight - 55);
+  ctx.fillText(`Generated from ${SHOP_NAME}`, 110, canvasHeight - 28);
 
   return blobFromCanvas(canvas);
 };
@@ -286,6 +350,14 @@ const BillDetailsCard = ({ bill, onPrint }) => {
         boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
       }}
     >
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 800, color: '#D4AF37' }}>
+          {SHOP_NAME}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {SHOP_ADDRESS}
+        </Typography>
+      </Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1} sx={{ mb: 2.5 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a' }}>
@@ -310,16 +382,17 @@ const BillDetailsCard = ({ bill, onPrint }) => {
           ['Bill Date', getFirstValue(bill, ['billDate'])],
           ['Delivery Date', getFirstValue(bill, ['deliveryDate', 'dueDate'])],
           ['Total Amount', `₹ ${formatCurrency(getFirstValue(bill, ['totalAmount'], 0))}`],
-          ['Discount', `₹ ${formatCurrency(getFirstValue(bill, ['discount'], 0))}`],
+          ['Discount Amount', `₹ ${formatCurrency(getDiscountAmount(bill))}`],
+          ['Discount %', `${formatCurrency(getDiscountPercent(bill))}%`],
           ['Paid Amount', `₹ ${formatCurrency(getFirstValue(bill, ['paidAmount'], 0))}`],
           ['Balance Amount', `₹ ${formatCurrency(getFirstValue(bill, ['balanceAmount', 'remainingAmount'], 0))}`],
         ].map(([label, value]) => (
           <Grid item xs={12} sm={6} md={4} key={label}>
             <Box
               sx={{
-                minHeight: 82,
+                minHeight: 60,
                 px: 2,
-                py: 1.5,
+                py: 1,
                 border: '1px solid #dbe6f5',
                 borderRadius: 1.5,
                 bgcolor: label === 'Balance Amount' ? '#fff7ed' : '#f8fbff',
@@ -388,6 +461,40 @@ const BillDetailsCard = ({ bill, onPrint }) => {
           {getFirstValue(bill, ['notes'])}
         </Typography>
       </Box>
+      <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #dbe6f5' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontWeight: 600 }}>
+          Brands available
+        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            justifyContent: 'flex-start',
+            alignItems: 'center',
+          }}
+        >
+          {SHOP_BRANDS.map((brand) => (
+            <Box
+              key={brand}
+              sx={{
+                px: 1.5,
+                py: 1,
+                border: '2px solid #1e3a8a',
+                borderRadius: 1,
+                minWidth: 100,
+                textAlign: 'center',
+                bgcolor: '#f8fbff',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#1e3a8a',
+              }}
+            >
+              {brand}
+            </Box>
+          ))}
+        </Box>
+      </Box>
     </Paper>
   );
 };
@@ -399,7 +506,8 @@ const ViewBillPrintTemplate = ({ bill }) => {
     <>
       <div className="header">
         <div>
-          <h1>Tailoring Shop</h1>
+          <h1>{SHOP_NAME}</h1>
+          <p className="muted">{SHOP_ADDRESS}</p>
           <p className="muted">Customer Invoice</p>
         </div>
         <div>
@@ -445,8 +553,12 @@ const ViewBillPrintTemplate = ({ bill }) => {
         </table>
         <div className="totals">
           <div>
-            <span>Discount</span>
-            <span>₹ {formatCurrency(getFirstValue(bill, ['discount'], 0))}</span>
+            <span>Discount Amount</span>
+            <span>₹ {formatCurrency(getDiscountAmount(bill))}</span>
+          </div>
+          <div>
+            <span>Discount %</span>
+            <span>{formatCurrency(getDiscountPercent(bill))}%</span>
           </div>
           <div className="grand">
             <span>Total Amount</span>
@@ -467,6 +579,13 @@ const ViewBillPrintTemplate = ({ bill }) => {
           <strong>Notes:</strong> {getFirstValue(bill, ['notes'])}
         </p>
       </div>
+      {/* // brand names
+      <div className="card">
+        <p>
+          <strong>Brands available:</strong> {SHOP_BRANDS.join(', ')}
+        </p>
+      </div>
+      */}
     </>
   );
 };
@@ -474,17 +593,22 @@ const ViewBillPrintTemplate = ({ bill }) => {
 const Billing = () => {
   const printRef = useRef(null);
   const viewBillPrintRef = useRef(null);
+  const customerBillPrintRefs = useRef({});
   const [activeTab, setActiveTab] = useState(0);
   const [customerLookupId, setCustomerLookupId] = useState('');
   const [billNumberLookup, setBillNumberLookup] = useState('');
-  const [createdBillNumber, setCreatedBillNumber] = useState('');
+  const [customerBillsLookup, setCustomerBillsLookup] = useState('');
+  const [generatedBill, setGeneratedBill] = useState(null);
+  const [generatedCustomer, setGeneratedCustomer] = useState(null);
   const [loadedBill, setLoadedBill] = useState(null);
+  const [customerBills, setCustomerBills] = useState([]);
   const [customer, setCustomer] = useState(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(true);
   const [billMeta, setBillMeta] = useState(createInitialBillMeta);
   const [items, setItems] = useState([createEmptyItem()]);
   const [loadingCustomer, setLoadingCustomer] = useState(false);
   const [loadingBill, setLoadingBill] = useState(false);
+  const [loadingCustomerBills, setLoadingCustomerBills] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
@@ -502,7 +626,13 @@ const Billing = () => {
     [lineTotals],
   );
 
-  const discountAmount = Math.min(toNumber(billMeta.discount), subTotal);
+  const discountableSubtotal = useMemo(
+    () => lineTotals.reduce((sum, row) => (isDiscountableItem(row.item) ? sum + row.total : sum), 0),
+    [lineTotals],
+  );
+
+  const discountPercent = Math.min(Math.max(toNumber(billMeta.discount), 0), 100);
+  const discountAmount = (discountableSubtotal * discountPercent) / 100;
   const totalAmount = Math.max(subTotal - discountAmount, 0);
   const paidAmount = Math.min(toNumber(billMeta.paidAmount), totalAmount);
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
@@ -590,11 +720,35 @@ const Billing = () => {
     }
   };
 
+  const loadCustomerBills = async () => {
+    const customerId = customerBillsLookup.trim();
+    if (!customerId) {
+      setFeedback({ type: 'error', message: 'Enter a customer ID to view customer bills.' });
+      return;
+    }
+
+    setLoadingCustomerBills(true);
+    try {
+      const response = await getBillsByCustomerId(customerId);
+      const bills = extractBills(response?.data);
+      setCustomerBills(bills);
+      setFeedback(bills.length ? null : { type: 'info', message: 'No bills found for that customer.' });
+    } catch (error) {
+      setCustomerBills([]);
+      setFeedback({
+        type: 'error',
+        message: error?.response?.data?.message || 'Unable to load bills for that customer.',
+      });
+    } finally {
+      setLoadingCustomerBills(false);
+    }
+  };
+
   const buildBillPayload = () => {
     const billItems = lineTotals.map((row) => ({
       itemName: row.item,
       itemDescription: row.description,
-      quantity: Math.trunc(toNumber(row.qty)),
+      quantity: toNumber(row.qty),
       rate: toNumber(row.price),
       amount: row.total,
     }));
@@ -605,6 +759,8 @@ const Billing = () => {
       deliveryDate: billMeta.dueDate,
       paymentMode: billMeta.paymentType,
       paidAmount,
+      discountAmount,
+      discountPer: discountPercent,
       discount: discountAmount,
       balanceAmount: remainingAmount,
       totalAmount,
@@ -613,17 +769,20 @@ const Billing = () => {
     };
   };
 
-  const buildWhatsAppBillMessage = ({ billNumber, payload }) => {
+  const buildWhatsAppBillMessage = ({ billNumber, payload, billCustomer = customer }) => {
     const itemLines = (payload.billItems || []).map(
       (item, index) =>
         `${index + 1}. ${item.itemName} x${item.quantity} - Rs ${formatCurrency(item.amount)}`,
     );
 
-    const customerName = customer?.name || 'Customer';
+    const customerName = billCustomer?.name || 'Customer';
     const lines = [
       `Hello ${customerName},`,
       '',
-      `Your bill has been generated from Tailoring Shop.`,
+      `${SHOP_NAME}`,
+      `${SHOP_ADDRESS}`,
+      '',
+      `Your bill has been generated.`,
       `Bill No: ${billNumber || '-'}`,
       `Bill Date: ${payload.billDate}`,
       `Delivery Date: ${payload.deliveryDate}`,
@@ -631,12 +790,16 @@ const Billing = () => {
       'Items:',
       ...itemLines,
       '',
+      `Discount Amount: Rs ${formatCurrency(payload.discountAmount ?? payload.discount ?? 0)}`,
+      `Discount: ${formatCurrency(payload.discountPer ?? payload.discountPercent ?? 0)}%`,
       `Total: Rs ${formatCurrency(payload.totalAmount)}`,
       `Paid: Rs ${formatCurrency(payload.paidAmount)}`,
       `Balance: Rs ${formatCurrency(payload.balanceAmount)}`,
       '',
       `Payment Type: ${payload.paymentMode}`,
       `Notes: ${payload.notes || 'Thank you for your business!'}`,
+      '',
+       {/* `Brands available: ${SHOP_BRANDS.join(', ')}`, */}
     ];
 
     return lines.join('\n');
@@ -693,8 +856,8 @@ const Billing = () => {
       return false;
     }
 
-    if (!items.some((row) => row.item && Number.isInteger(toNumber(row.qty)) && toNumber(row.qty) > 0 && toNumber(row.price) >= 0)) {
-      setFeedback({ type: 'error', message: 'Add at least one bill item with a whole-number quantity.' });
+    if (!items.some((row) => row.item && Number.isFinite(Number(row.qty)) && toNumber(row.qty) > 0 && Number.isFinite(Number(row.price)) && toNumber(row.price) >= 0)) {
+      setFeedback({ type: 'error', message: 'Add at least one bill item with a quantity greater than 0.' });
       return false;
     }
 
@@ -704,54 +867,43 @@ const Billing = () => {
   const saveBillToDb = async () => {
     const payload = buildBillPayload();
     const response = await createBill(payload);
-    const billNumber = extractBillNumberFromResponse(response?.data);
-    setCreatedBillNumber(billNumber);
-
+    const billNumber = extractBillNumberFromResponse(response?.data, response?.headers);
     return { payload, billNumber };
   };
 
-  const handlePrintBill = async () => {
-    if (!validateBillBeforeSave()) {
-      return;
-    }
+  const handleGenerateBill = async () => {
+    if (!validateBillBeforeSave()) return;
 
     setSaving(true);
     try {
-      const { billNumber } = await saveBillToDb();
-      setFeedback({
-        type: 'success',
-        message: `Bill saved for customer ${customer.id} and opened for print.`,
-      });
-      // Wait for the hidden print template to re-render with the latest bill number.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => openPrintWindow());
-      });
-
-      if (!billNumber) {
-        setFeedback({
-          type: 'warning',
-          message: 'Bill saved, but bill number was not returned by API response. Invoice shows "-" until backend includes bill number field.',
-        });
-      }
+      const { payload, billNumber } = await saveBillToDb();
+      setGeneratedBill({ ...payload, billNumber, customer: customer?.name });
+      setGeneratedCustomer(customer);
+      setCustomer(null);
+      setCustomerLookupId('');
+      setIsEditingCustomer(true);
+      setBillMeta(createInitialBillMeta());
+      setItems([createEmptyItem()]);
+      setFeedback({ type: 'success', message: 'Bill saved successfully.' });
     } catch (error) {
       setFeedback({
         type: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Unable to save bill. Please verify billing API endpoint is available.',
+        message: error?.response?.data?.message || error?.message || 'Unable to save bill.',
       });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleShareOnWhatsApp = async () => {
-    if (!validateBillBeforeSave()) {
-      return;
-    }
+  const handlePrintBill = () => {
+    if (!generatedBill) return;
+    openPrintWindow();
+  };
 
-    const whatsappNumber = normalizePhoneForWhatsApp(customer?.mobileNumber);
+  const handleShareOnWhatsApp = async () => {
+    if (!generatedBill || !generatedCustomer) return;
+
+    const whatsappNumber = normalizePhoneForWhatsApp(generatedCustomer.mobileNumber);
     if (!whatsappNumber) {
       setFeedback({ type: 'error', message: 'Customer mobile number is required to share bill on WhatsApp.' });
       return;
@@ -759,11 +911,12 @@ const Billing = () => {
 
     setSaving(true);
     try {
-      const { payload, billNumber } = await saveBillToDb();
-      const receiptBlob = await buildBillReceiptPng({ billNumber, payload, customer });
+      const payload = generatedBill;
+      const billNumber = generatedBill.billNumber;
+      const receiptBlob = await buildBillReceiptPng({ billNumber, payload, customer: generatedCustomer });
       const receiptFileName = `bill-${billNumber || Date.now()}.png`;
       const receiptFile = new File([receiptBlob], receiptFileName, { type: 'image/png' });
-      const message = buildWhatsAppBillMessage({ billNumber, payload });
+      const message = buildWhatsAppBillMessage({ billNumber, payload, billCustomer: generatedCustomer });
 
       if (navigator.share && navigator.canShare?.({ files: [receiptFile] })) {
         await navigator.share({
@@ -773,7 +926,7 @@ const Billing = () => {
         });
         setFeedback({
           type: 'success',
-          message: `Bill saved and shared as PNG for customer ${customer.id}.`,
+          message: `Bill shared as PNG for customer ${generatedCustomer.id}.`,
         });
         return;
       }
@@ -786,14 +939,14 @@ const Billing = () => {
       if (!shareWindow) {
         setFeedback({
           type: 'warning',
-          message: 'Bill saved and PNG downloaded. WhatsApp window was blocked; please open WhatsApp and attach the downloaded PNG manually.',
+          message: 'Bill PNG downloaded. WhatsApp window was blocked; please attach it manually.',
         });
         return;
       }
 
       setFeedback({
         type: 'success',
-        message: `Bill saved. PNG downloaded and WhatsApp opened for customer ${customer.id}.`,
+        message: `Bill shared. PNG downloaded and WhatsApp opened for customer ${generatedCustomer.id}.`,
       });
     } catch (error) {
       if (error?.name === 'AbortError') {
@@ -832,7 +985,7 @@ const Billing = () => {
       <PageTabs
         value={activeTab}
         onChange={(_, nextTab) => setActiveTab(nextTab)}
-        tabs={[{ label: 'Create Bill' }, { label: 'View Bill' }]}
+        tabs={[{ label: 'Create Bill' }, { label: 'View Bill' }, { label: 'Customer Bills' }]}
         sx={{ mb: 2, borderBottom: '1px solid #dbe6f5' }}
       />
 
@@ -877,6 +1030,55 @@ const Billing = () => {
               </Box>
             </>
           )}
+        </Stack>
+      ) : activeTab === 2 ? (
+        <Stack spacing={2}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 2.5 },
+              borderRadius: 2,
+              border: '1px solid #dbe6f5',
+              bgcolor: 'white',
+            }}
+          >
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <TextField
+                size="small"
+                label="Customer ID"
+                value={customerBillsLookup}
+                onChange={(event) => setCustomerBillsLookup(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') loadCustomerBills();
+                }}
+                sx={{ minWidth: { sm: 260 } }}
+              />
+              <Button variant="contained" onClick={loadCustomerBills} disabled={loadingCustomerBills}>
+                {loadingCustomerBills ? 'Loading...' : 'View Customer Bills'}
+              </Button>
+            </Stack>
+          </Paper>
+
+          {customerBills.map((bill, index) => {
+            const billKey = getFirstValue(bill, ['billNumber', 'billNo', 'id'], index);
+            const printKey = `${billKey}-${index}`;
+            return (
+              <Box key={printKey}>
+                <BillDetailsCard
+                  bill={bill}
+                  onPrint={() => openPrintWindow({ current: customerBillPrintRefs.current[printKey] })}
+                />
+                <Box
+                  ref={(element) => {
+                    customerBillPrintRefs.current[printKey] = element;
+                  }}
+                  sx={{ display: 'none' }}
+                >
+                  <ViewBillPrintTemplate bill={bill} />
+                </Box>
+              </Box>
+            );
+          })}
         </Stack>
       ) : (
       <>
@@ -996,7 +1198,7 @@ const Billing = () => {
               <TextField
                 size="small"
                 type="date"
-                label="Due Date"
+                label="Delivery Date"
                 value={billMeta.dueDate}
                 onChange={handleBillMetaChange('dueDate')}
                 InputLabelProps={{ shrink: true }}
@@ -1023,7 +1225,7 @@ const Billing = () => {
           </Box>
         </Grid>
 
-        <Grid item xs={12}>
+        <Grid item xs={12} md={7} sx={{ order: 1 }}>
           <Box
             sx={{
               borderTop: '1px solid #e2e8f0',
@@ -1096,7 +1298,7 @@ const Billing = () => {
                             type="number"
                             value={row.qty}
                             onChange={handleItemChange(row.id, 'qty')}
-                            inputProps={{ min: 1, step: 1 }}
+                            inputProps={{ min: 0.01, step: 0.01 }}
                             sx={{ width: 90 }}
                           />
                          {/* /* <TextField
@@ -1138,7 +1340,7 @@ const Billing = () => {
           </Box>
         </Grid>
 
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12} md={7} sx={{ order: { xs: 2, md: 3 } }}>
           <Box
             sx={{
               height: '100%',
@@ -1166,7 +1368,7 @@ const Billing = () => {
           </Box>
         </Grid>
 
-        <Grid item xs={12} md={5}>
+        <Grid item xs={12} md={5} sx={{ order: { xs: 3, md: 2 } }}>
           <Box
             sx={{
               height: '100%',
@@ -1181,9 +1383,16 @@ const Billing = () => {
                 Bill Summary
               </Typography>
               <Stack direction="row" justifyContent="space-between"><Typography color="text.secondary">Sub total</Typography><Typography fontWeight={700}>₹ {formatCurrency(subTotal)}</Typography></Stack>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                <Typography color="text.secondary">Discount</Typography>
-                <TextField size="small" type="number" value={billMeta.discount} onChange={handleBillMetaChange('discount')} inputProps={{ min: 0, step: 0.01 }} sx={{ width: 130 }} InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }} />
+              <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Discount applies to Suiting and Shirting</Typography><Typography variant="body2" fontWeight={700}>₹ {formatCurrency(discountableSubtotal)}</Typography></Stack>
+              <Stack spacing={0.5}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                  <Typography color="text.secondary">Discount %</Typography>
+                  <TextField size="small" type="number" value={billMeta.discount} onChange={handleBillMetaChange('discount')} inputProps={{ min: 0, max: 100, step: 0.01 }} sx={{ width: 130 }} InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }} />
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">Discount amount</Typography>
+                  <Typography variant="body2" fontWeight={700}>- ₹ {formatCurrency(discountAmount)}</Typography>
+                </Stack>
               </Stack>
               <Divider />
               <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Total</Typography><Typography sx={{ fontWeight: 800, color: '#2563eb', fontSize: 20 }}>₹ {formatCurrency(totalAmount)}</Typography></Stack>
@@ -1193,31 +1402,16 @@ const Billing = () => {
               </Stack>
               <Stack direction="row" justifyContent="space-between"><Typography sx={{ fontWeight: 800 }}>Balance due</Typography><Typography sx={{ fontWeight: 800, color: '#dc2626', fontSize: 18 }}>₹ {formatCurrency(remainingAmount)}</Typography></Stack>
               <Divider />
-              <Stack direction="row" spacing={1.2}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={handlePrintBill}
-                  disabled={saving}
-                  sx={{ borderRadius: 2, fontWeight: 600, textTransform: 'none' }}
-                >
-                  {saving ? 'Saving...' : 'Print Bill'}
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={handleShareOnWhatsApp}
-                  disabled={saving}
-                  aria-label="Share on WhatsApp"
-                  sx={{
-                    borderRadius: 2,
-                    minWidth: 44,
-                    width: 44,
-                    height: 40,
-                    px: 0,
-                  }}
-                  startIcon={<WhatsAppIcon />}
-                />
-              </Stack>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<ReceiptLongIcon />}
+                onClick={handleGenerateBill}
+                disabled={saving}
+                sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}
+              >
+                {saving ? 'Saving...' : 'Generate Bill'}
+              </Button>
             </Stack>
           </Box>
         </Grid>
@@ -1225,98 +1419,26 @@ const Billing = () => {
       </Paper>
 
       <Box ref={printRef} sx={{ display: 'none' }}>
-        <div className="header">
-          <div>
-            <h1>Tailoring Shop</h1>
-            <p className="muted">Customer Invoice</p>
-          </div>
-          <div>
-            <p className="muted">Bill No: {createdBillNumber || '-'}</p>
-            <p className="muted">Date: {billMeta.billDate}</p>
-            <p className="muted">Due: {billMeta.dueDate}</p>
-          </div>
-        </div>
-
-        <div className="card">
-          <h3>Customer Information</h3>
-          <p>
-            <strong>ID:</strong> {customer?.id || '-'}
-          </p>
-          <p>
-            <strong>Name:</strong> {customer?.name || '-'}
-          </p>
-          <p>
-            <strong>Mobile:</strong> {customer?.mobileNumber || '-'}
-          </p>
-          <p>
-            <strong>Address:</strong> {customer?.address || '-'}
-          </p>
-        </div>
-
-        <div className="card">
-          <h3>Bill Items</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Sr</th>
-                <th>Item</th>
-                <th>Description</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineTotals.map((row, index) => (
-                <tr key={row.id}>
-                  <td>{index + 1}</td>
-                  <td>{row.item}</td>
-                  <td>{row.description || '-'}</td>
-                  <td>
-                    {row.qty} {row.unit}
-                  </td>
-                  <td>₹ {formatCurrency(row.price)}</td>
-                  <td>₹ {formatCurrency(row.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="totals">
-            <div>
-              <span>Sub Total</span>
-              <span>₹ {formatCurrency(subTotal)}</span>
-            </div>
-            <div>
-              <span>Discount</span>
-              <span>₹ {formatCurrency(discountAmount)}</span>
-            </div>
-            <div className="grand">
-              <span>Total Amount</span>
-              <span>₹ {formatCurrency(totalAmount)}</span>
-            </div>
-            <div>
-              <span>Paid Amount</span>
-              <span>₹ {formatCurrency(paidAmount)}</span>
-            </div>
-            <div className="grand">
-              <span>Remaining Amount</span>
-              <span>₹ {formatCurrency(remainingAmount)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <p>
-            <strong>Payment Type:</strong> {billMeta.paymentType}
-          </p>
-          <p>
-            <strong>Notes:</strong> {billMeta.notes || 'Thank you for your business!'}
-          </p>
-        </div>
+        {generatedBill && <ViewBillPrintTemplate bill={generatedBill} />}
       </Box>
       </>
       )}
+
+      <Dialog open={Boolean(generatedBill)} onClose={() => setGeneratedBill(null)} fullWidth maxWidth="md">
+        <DialogTitle>Generated Bill</DialogTitle>
+        <DialogContent dividers>
+          {generatedBill && <BillDetailsCard bill={generatedBill} onPrint={handlePrintBill} />}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handlePrintBill} startIcon={<PrintIcon />} variant="outlined">
+            Print Bill
+          </Button>
+          <Button onClick={handleShareOnWhatsApp} startIcon={<WhatsAppIcon />} variant="contained" color="success" disabled={saving}>
+            Share on WhatsApp
+          </Button>
+          <Button onClick={() => setGeneratedBill(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -50,8 +50,17 @@ const requestCustomerApis = async (method, paths, data) => {
 
 export const getCustomers = () => requestCustomerApis('get', ['/getallcustomer', '/getallcustomers', '/customers', '/all']);
 export const getCustomersWithBalance = () => requestCustomerApis('get', ['/getcustomer/withbalance', '/getCustomer/withbalance', '/customers/withbalance']);
+export const getCustomersWithDeliveryDate = (date) =>
+  requestCustomerApis('get', [`/getCustomerwithdeliverydate/${encodeURIComponent(date)}`]);
 export const getCustomerCount = () => requestCustomerApis('get', ['/getCustomerCount', '/customercount', '/count']);
 export const getCustomerById = (id) => requestCustomerApis('get', [`/getcustomer/${id}`, `/customer/${id}`, `/getCustomer/${id}`, `/customers/${id}`, `/get/customer/${id}`]);
+export const getCustomerByMobileNo = (mobileNumber) =>
+  requestCustomerApis('get', [
+    `/getcustomer/withmobileno/${mobileNumber}`,
+    `/getCustomer/withmobileno/${mobileNumber}`,
+    `/customer/withmobileno/${mobileNumber}`,
+    `/customers/withmobileno/${mobileNumber}`,
+  ]);
 export const createCustomer = (customer) => requestCustomerApis('post', ['/create', '/createcustomer', '/customers'], customer);
 export const updateCustomer = (id, customer) => requestCustomerApis('put', [`/updatecustomer/${id}`, `/customer/${id}`, `/customers/${id}`], customer);
 export const updateCustomerBalence = (id, amount) =>

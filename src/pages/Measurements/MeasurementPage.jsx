@@ -1,3 +1,4 @@
+import JacketMeasurement from './jacketmeasurement.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -26,24 +27,56 @@ import {
   updateCustomer,
 } from '../../services/api';
 import {
+  createBlazerMeasurement,
+  createJacketMeasurement,
   createPantMeasurement,
+  createSherwaniMeasurement,
   createShirtMeasurement,
+  getBlazerMeasurementById,
+  getJacketMeasurementById,
   getMeasurementById,
   getMeasurements,
   getPantMeasurementById,
+  getSherwaniMeasurementById,
   getShirtMeasurementById,
 } from '../../services/measurementApi';
 import PageTabs from '../../components/common/PageTabs';
 import {
   createMeasurementState,
+  blazerMeasurementFields,
   getMeasurementFieldLabel,
+  jacketMeasurementFields,
+  measurementBackendKeys,
   pantMeasurementFields,
+  sherwaniMeasurementFields,
   shirtMeasurementFields,
 } from '../../constants/measurementFields';
 
 const shirtFields = shirtMeasurementFields.map((field) => field.key);
 const pantFields = pantMeasurementFields.map((field) => field.key);
+const jacketFields = jacketMeasurementFields.map((field) => field.key);
+const blazerFields = blazerMeasurementFields.map((field) => field.key);
+const sherwaniFields = sherwaniMeasurementFields.map((field) => field.key);
+const measurementTypes = [
+  { key: 'shirt', label: 'Shirt Measurement', formKey: 'shirtMeasurements', fields: shirtMeasurementFields },
+  { key: 'pant', label: 'Pant Measurement', formKey: 'pantMeasurements', fields: pantMeasurementFields },
+  { key: 'jacket', label: 'Jacket Measurement', formKey: 'jacketMeasurements', fields: jacketMeasurementFields },
+  { key: 'blazer', label: 'Blazer Measurement', formKey: 'blazerMeasurements', fields: blazerMeasurementFields },
+  { key: 'sherwani', label: 'Sherwani Measurement', formKey: 'sherwaniMeasurements', fields: sherwaniMeasurementFields },
+];
 const FIXED_MEASUREMENT_ID = '101';
+const MEASUREMENT_VALUE_PATTERN = /^\d{1,2}(?:\.\d{1,2})?$/;
+
+const validateMeasurementValue = (value) => {
+  const normalizedValue = String(value ?? '').trim();
+  if (!normalizedValue) return '';
+
+  if (!MEASUREMENT_VALUE_PATTERN.test(normalizedValue) || Number(normalizedValue) > 99.99) {
+    return 'Enter a value from 0 to 99.99.';
+  }
+
+  return '';
+};
 
 const parseJsonIfString = (payload) => {
   if (typeof payload !== 'string') return payload;
@@ -75,6 +108,8 @@ const sanitizeMeasurementValue = (value) => {
   }
   return value;
 };
+
+const toTrimmedString = (value) => String(value ?? '').trim();
 
 const normalizeLookupKey = (key = '') =>
   String(key)
@@ -110,7 +145,14 @@ const pickMeasurementValue = (source = {}, aliases = []) => {
     const contained = entries.find(([key]) => normalizeLookupKey(key).includes(alias));
     if (contained) {
       const value = sanitizeMeasurementValue(contained[1]);
-      if (value !== '') return value;
+      if (value !== '' && (typeof value !== 'object' || value === null)) return value;
+    }
+  }
+
+  for (const [, value] of entries) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nestedValue = pickMeasurementValue(value, aliases);
+      if (nestedValue !== '') return nestedValue;
     }
   }
 
@@ -143,17 +185,22 @@ const mergeMissingMeasurementValues = (primary = {}, fallback = {}) => {
 };
 
 const getMeasurementNoteByTab = (measurement = {}, customer = {}, activeTab = 0) => {
-  const tabKey = activeTab === 0 ? 'shirt' : 'pant';
+  const tabKey = measurementTypes[activeTab]?.key || 'shirt';
   const tabNote = sanitizeMeasurementValue(measurement?.measurementNotes?.[tabKey]);
   if (tabNote !== '') return tabNote;
 
   const customerTabNote = sanitizeMeasurementValue(customer?.measurementNotes?.[tabKey]);
   if (customerTabNote !== '') return customerTabNote;
 
-  const sharedNote = sanitizeMeasurementValue(measurement?.notes);
-  if (sharedNote !== '') return sharedNote;
-
   return 'No notes added for this measurement profile.';
+};
+
+const getMeasurementNote = (source = {}, typeKey, allowLegacyNote = false) => {
+  const root = unwrapMeasurementPayload(source);
+  const scopedNote = sanitizeMeasurementValue(root.measurementNotes?.[typeKey]);
+  if (scopedNote !== '') return scopedNote;
+
+  return allowLegacyNote ? sanitizeMeasurementValue(root.notes) : '';
 };
 
 const unwrapMeasurementPayload = (payload = {}) => {
@@ -213,23 +260,35 @@ const normalizeCustomer = (customer = {}) => {
     shirtMeasurements: {
       ...flatShirtFromCustomer,
       ...resolveMeasurementMap(
-        safeCustomer.shirtMeasurements ?? safeCustomer.shirtMeasurement ?? safeCustomer.measurements?.shirtMeasurements ?? safeCustomer.measurements?.shirtMeasurement ?? safeCustomer.measurement?.shirtMeasurements ?? safeCustomer.measurement?.shirtMeasurement ?? {}
+        safeCustomer.shirtMeasurements ?? safeCustomer.shirtMeasuremet ?? safeCustomer.shirtMeasurement ?? safeCustomer.measurements?.shirtMeasurements ?? safeCustomer.measurements?.shirtMeasuremet ?? safeCustomer.measurements?.shirtMeasurement ?? safeCustomer.measurement?.shirtMeasurements ?? safeCustomer.measurement?.shirtMeasuremet ?? safeCustomer.measurement?.shirtMeasurement ?? {}
       ),
     },
     pantMeasurements: {
       ...flatPantFromCustomer,
       ...resolveMeasurementMap(
-        safeCustomer.pantMeasurements ?? safeCustomer.pantMeasurement ?? safeCustomer.measurements?.pantMeasurements ?? safeCustomer.measurements?.pantMeasurement ?? safeCustomer.measurement?.pantMeasurements ?? safeCustomer.measurement?.pantMeasurement ?? {}
+        safeCustomer.pantMeasurements ?? safeCustomer.pantMeasuremet ?? safeCustomer.pantMeasurement ?? safeCustomer.measurements?.pantMeasurements ?? safeCustomer.measurements?.pantMeasuremet ?? safeCustomer.measurements?.pantMeasurement ?? safeCustomer.measurement?.pantMeasurements ?? safeCustomer.measurement?.pantMeasuremet ?? safeCustomer.measurement?.pantMeasurement ?? {}
       ),
     },
-    measurementNotes: unwrapMeasurementPayload(safeCustomer.measurementNotes ?? { shirt: safeCustomer.notes ?? '', pant: safeCustomer.notes ?? '' }),
+    jacketMeasurements: normalizeMeasurementFields(
+      { ...safeCustomer, ...resolveMeasurementMap(safeCustomer.jacketMeasurements ?? safeCustomer.jacketMeasuremet ?? safeCustomer.jacketMeasurement ?? safeCustomer.measurements?.jacketMeasurements ?? safeCustomer.measurements?.jacketMeasuremet ?? safeCustomer.measurements?.jacketMeasurement ?? safeCustomer.measurement?.jacketMeasurements ?? safeCustomer.measurement?.jacketMeasuremet ?? safeCustomer.measurement?.jacketMeasurement ?? {}) },
+      jacketMeasurementFields,
+    ),
+    blazerMeasurements: normalizeMeasurementFields(
+      safeCustomer.blazerMeasurements ?? safeCustomer.blazerMeasurement ?? safeCustomer.measurements?.blazerMeasurements ?? safeCustomer.measurements?.blazerMeasurement ?? safeCustomer.measurement?.blazerMeasurements ?? safeCustomer.measurement?.blazerMeasurement ?? {},
+      blazerMeasurementFields,
+    ),
+    sherwaniMeasurements: normalizeMeasurementFields(
+      safeCustomer.sherwaniMeasurements ?? safeCustomer.sherwaniMeasuremet ?? safeCustomer.sherwaniMeasurement ?? safeCustomer.measurements?.sherwaniMeasurements ?? safeCustomer.measurements?.sherwaniMeasuremet ?? safeCustomer.measurements?.sherwaniMeasurement ?? safeCustomer.measurement?.sherwaniMeasurements ?? safeCustomer.measurement?.sherwaniMeasuremet ?? safeCustomer.measurement?.sherwaniMeasurement ?? {},
+      sherwaniMeasurementFields,
+    ),
+    measurementNotes: unwrapMeasurementPayload(safeCustomer.measurementNotes ?? { shirt: safeCustomer.notes ?? '' }),
   };
 };
 
 const coalesceMeasurementSource = (...sources) => {
   for (const source of sources) {
     const candidate = unwrapMeasurementPayload(source ?? {});
-    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length > 0) {
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.values(candidate).some((value) => value !== null && value !== undefined && String(value).trim() !== '')) {
       return candidate;
     }
   }
@@ -253,7 +312,15 @@ const readMeasurementObject = (value) => {
 
   const inner =
     normalized.shirtMeasurement ??
+    normalized.shirtMeasuremet ??
     normalized.pantMeasurement ??
+    normalized.pantMeasuremet ??
+    normalized.jacketMeasurement ??
+    normalized.jacketMeasuremet ??
+    normalized.blazerMeasurement ??
+    normalized.blazerMeasuremet ??
+    normalized.sherwaniMeasurement ??
+    normalized.sherwaniMeasuremet ??
     normalized.shirtMeasurements ??
     normalized.pantMeasurements ??
     normalized.measurement;
@@ -297,12 +364,16 @@ const extractMeasurementRecords = (payload) => {
 
 const normalizeMeasurement = (measurement = {}) => {
   const root = unwrapMeasurementPayload(measurement);
+  const rootNotes = unwrapMeasurementPayload(root.measurementNotes ?? {});
   const shirtSource = resolveMeasurementMap(
-    root.shirtMeasurements ?? root.shirtMeasurement ?? root.measurements?.shirtMeasurements ?? root.measurements?.shirtMeasurement ?? root.measurement?.shirtMeasurements ?? root.measurement?.shirtMeasurement ?? {}
+    root.shirtMeasurements ?? root.shirtMeasuremet ?? root.shirtMeasurement ?? root.measurements?.shirtMeasurements ?? root.measurements?.shirtMeasuremet ?? root.measurements?.shirtMeasurement ?? root.measurement?.shirtMeasurements ?? root.measurement?.shirtMeasuremet ?? root.measurement?.shirtMeasurement ?? {}
   );
   const pantSource = resolveMeasurementMap(
-    root.pantMeasurements ?? root.pantMeasurement ?? root.measurements?.pantMeasurements ?? root.measurements?.pantMeasurement ?? root.measurement?.pantMeasurements ?? root.measurement?.pantMeasurement ?? {}
+    root.pantMeasurements ?? root.pantMeasuremet ?? root.pantMeasurement ?? root.measurements?.pantMeasurements ?? root.measurements?.pantMeasuremet ?? root.measurements?.pantMeasurement ?? root.measurement?.pantMeasurements ?? root.measurement?.pantMeasuremet ?? root.measurement?.pantMeasurement ?? {}
   );
+  const jacketSource = resolveMeasurementMap(root.jacketMeasurements ?? root.jacketMeasuremet ?? root.jacketMeasurement ?? root.measurements?.jacketMeasurements ?? root.measurements?.jacketMeasuremet ?? root.measurements?.jacketMeasurement ?? root.measurement?.jacketMeasurements ?? root.measurement?.jacketMeasuremet ?? root.measurement?.jacketMeasurement ?? {});
+  const blazerSource = resolveMeasurementMap(root.blazerMeasurements ?? root.blazerMeasurement ?? root.measurements?.blazerMeasurements ?? root.measurements?.blazerMeasurement ?? {});
+  const sherwaniSource = resolveMeasurementMap(root.sherwaniMeasurements ?? root.sherwaniMeasuremet ?? root.sherwaniMeasurement ?? root.measurements?.sherwaniMeasurements ?? root.measurements?.sherwaniMeasuremet ?? root.measurements?.sherwaniMeasurement ?? root.measurement?.sherwaniMeasurements ?? root.measurement?.sherwaniMeasuremet ?? root.measurement?.sherwaniMeasurement ?? {});
 
   return {
     id: root.id ?? root.measurementId ?? root.customerId ?? '',
@@ -310,14 +381,53 @@ const normalizeMeasurement = (measurement = {}) => {
     customerName: root.customerName ?? root.customer?.name ?? '',
     shirtMeasurements: normalizeShirtMeasurements({ ...root, ...shirtSource }),
     pantMeasurements: normalizePantMeasurements({ ...root, ...pantSource }),
-    notes: root.notes ?? root.measurementNotes?.shirt ?? root.measurementNotes?.pant ?? '',
+    jacketMeasurements: normalizeMeasurementFields(jacketSource, jacketMeasurementFields, 'jacket'),
+    blazerMeasurements: normalizeMeasurementFields(blazerSource, blazerMeasurementFields),
+    sherwaniMeasurements: normalizeMeasurementFields(sherwaniSource, sherwaniMeasurementFields),
+    measurementNotes: {
+      shirt: rootNotes.shirt ?? shirtSource.notes ?? '',
+      pant: rootNotes.pant ?? pantSource.notes ?? '',
+      jacket: rootNotes.jacket ?? jacketSource.notes ?? '',
+      blazer: rootNotes.blazer ?? blazerSource.notes ?? '',
+      sherwani: rootNotes.sherwani ?? sherwaniSource.notes ?? '',
+    },
   };
+};
+
+const normalizeMeasurementFields = (measurement = {}, fields, measurementType = '') => {
+  const root = unwrapMeasurementPayload(measurement);
+  const nestedSource = measurementType
+    ? Object.entries(root).find(([key, value]) => normalizeLookupKey(key).includes(measurementType) && value && typeof value === 'object')?.[1]
+    : null;
+  const source = nestedSource && typeof nestedSource === 'object'
+    ? { ...root, ...unwrapMeasurementPayload(nestedSource) }
+    : root;
+  return fields.reduce((values, field) => {
+    const aliases = [field.key];
+    if (measurementType) {
+      aliases.push(`${measurementType}${field.key.charAt(0).toUpperCase()}${field.key.slice(1)}`);
+    }
+    if (measurementType === 'jacket') {
+      const jacketAliases = {
+        length: ['jacketLength', 'jacket_length', 'height'],
+        chest: ['jacketChest', 'jacket_chest'],
+        waist: ['jacketWaist', 'jacket_waist'],
+        hip: ['jacketHip', 'jacket_hip'],
+        shoulder: ['jacketShoulder', 'jacket_shoulder'],
+        standCollar: ['jacketStandCollar', 'jacket_stand_collar', 'jacketStand', 'standCollar', 'stand'],
+      };
+      aliases.push(...(jacketAliases[field.key] || []));
+    }
+    values[field.key] = pickMeasurementValue(source, aliases);
+    return values;
+  }, {});
 };
 
 const normalizeShirtMeasurements = (measurement = {}) => {
   const root = unwrapMeasurementPayload(measurement);
   const nested = unwrapMeasurementPayload(
     root.shirtMeasurements ??
+      root.shirtMeasuremet ??
       root.shirtMeasurement ??
       root.measurements?.shirtMeasurements ??
       root.measurements?.shirtMeasurement ??
@@ -343,6 +453,7 @@ const normalizePantMeasurements = (measurement = {}) => {
   const root = unwrapMeasurementPayload(measurement);
   const nested = unwrapMeasurementPayload(
     root.pantMeasurements ??
+      root.pantMeasuremet ??
       root.pantMeasurement ??
       root.measurements?.pantMeasurements ??
       root.measurements?.pantMeasurement ??
@@ -357,6 +468,7 @@ const normalizePantMeasurements = (measurement = {}) => {
     waist: pickMeasurementValue(source, ['pantWaist', 'pant_waist', 'waist', 'pantwaist', 'waistSize', 'kamar', 'kambar']),
     hip: pickMeasurementValue(source, ['hip']),
     thigh: pickMeasurementValue(source, ['thigh']),
+    chainFly: pickMeasurementValue(source, ['chainFly', 'chain_fly', 'chainfly', 'pantChainFly', 'pant_chain_fly', 'chainFlyLength']),
     knee: pickMeasurementValue(source, ['knee']),
     calf: pickMeasurementValue(source, ['calf']),
     bottom: pickMeasurementValue(source, ['bottom']),
@@ -369,13 +481,16 @@ const buildEmptyForm = () => ({
   customerName: '',
   shirtMeasurements: createMeasurementState(shirtMeasurementFields),
   pantMeasurements: createMeasurementState(pantMeasurementFields),
+  jacketMeasurements: createMeasurementState(jacketMeasurementFields),
+  blazerMeasurements: createMeasurementState(blazerMeasurementFields),
+  sherwaniMeasurements: createMeasurementState(sherwaniMeasurementFields),
   notes: '',
 });
 
 const buildFormFromCustomer = (customer = {}, measurement = {}) => ({
   measurementId: FIXED_MEASUREMENT_ID,
-  customerId: customer.id ?? measurement.customerId ?? '',
-  customerName: customer.name ?? measurement.customerName ?? '',
+  customerId: toTrimmedString(customer.id ?? measurement.customerId),
+  customerName: toTrimmedString(customer.name ?? measurement.customerName),
   shirtMeasurements: shirtFields.reduce((accumulator, field) => {
     accumulator[field] = measurement.shirtMeasurements?.[field] ?? customer.shirtMeasurements?.[field] ?? '';
     return accumulator;
@@ -384,19 +499,34 @@ const buildFormFromCustomer = (customer = {}, measurement = {}) => ({
     accumulator[field] = measurement.pantMeasurements?.[field] ?? customer.pantMeasurements?.[field] ?? '';
     return accumulator;
   }, {}),
-  notes: measurement.notes ?? '',
+  jacketMeasurements: jacketFields.reduce((accumulator, field) => {
+    accumulator[field] = measurement.jacketMeasurements?.[field] ?? customer.jacketMeasurements?.[field] ?? '';
+    return accumulator;
+  }, {}),
+  blazerMeasurements: blazerFields.reduce((accumulator, field) => {
+    accumulator[field] = measurement.blazerMeasurements?.[field] ?? customer.blazerMeasurements?.[field] ?? '';
+    return accumulator;
+  }, {}),
+  sherwaniMeasurements: sherwaniFields.reduce((accumulator, field) => {
+    accumulator[field] = measurement.sherwaniMeasurements?.[field] ?? customer.sherwaniMeasurements?.[field] ?? '';
+    return accumulator;
+  }, {}),
+  notes: measurement.measurementNotes?.shirt ?? measurement.notes ?? '',
 });
 
 const buildMeasurementPayload = (formData, customer = null) => {
   const shirtMeasurements = { ...formData.shirtMeasurements };
   const pantMeasurements = { ...formData.pantMeasurements };
+  const jacketMeasurements = { ...formData.jacketMeasurements };
+  const blazerMeasurements = { ...formData.blazerMeasurements };
+  const sherwaniMeasurements = { ...formData.sherwaniMeasurements };
 
   return {
     measurementId: FIXED_MEASUREMENT_ID,
     id: FIXED_MEASUREMENT_ID,
-    customerId: formData.customerId.trim(),
-    custId: formData.customerId.trim(),
-    customerName: formData.customerName.trim(),
+    customerId: toTrimmedString(formData.customerId),
+    custId: toTrimmedString(formData.customerId),
+    customerName: toTrimmedString(formData.customerName),
     customer: customer
       ? {
           id: customer.id,
@@ -407,7 +537,9 @@ const buildMeasurementPayload = (formData, customer = null) => {
       : undefined,
     shirtMeasurements,
     pantMeasurements,
-    notes: formData.notes.trim(),
+    jacketMeasurements,
+    blazerMeasurements,
+    sherwaniMeasurements,
     neck: shirtMeasurements.neck,
     chest: shirtMeasurements.chest,
     waist: shirtMeasurements.waist,
@@ -420,18 +552,37 @@ const buildMeasurementPayload = (formData, customer = null) => {
     shirtHip: shirtMeasurements.hip,
     pantWaist: pantMeasurements.waist,
     pantLength: pantMeasurements.length,
+    pantMeasurement: { ...pantMeasurements },
+    pantMeasuremet: { ...pantMeasurements },
+    pantLengthValue: pantMeasurements.length,
+    pantWaistValue: pantMeasurements.waist,
     hip: pantMeasurements.hip,
     thigh: pantMeasurements.thigh,
     knee: pantMeasurements.knee,
     calf: pantMeasurements.calf,
     bottom: pantMeasurements.bottom,
+    jacketChest: jacketMeasurements.chest,
+    jacketWaist: jacketMeasurements.waist,
+    jacketShoulder: jacketMeasurements.shoulder,
+    jacketSleeve: jacketMeasurements.sleeve,
+    jacketLength: jacketMeasurements.length,
+    blazerChest: blazerMeasurements.chest,
+    blazerWaist: blazerMeasurements.waist,
+    blazerShoulder: blazerMeasurements.shoulder,
+    blazerSleeve: blazerMeasurements.sleeve,
+    blazerLength: blazerMeasurements.length,
+    sherwaniChest: sherwaniMeasurements.chest,
+    sherwaniWaist: sherwaniMeasurements.waist,
+    sherwaniShoulder: sherwaniMeasurements.shoulder,
+    sherwaniSleeve: sherwaniMeasurements.sleeve,
+    sherwaniLength: sherwaniMeasurements.length,
   };
 };
 
 const buildShirtMeasurementPayload = (formData, customer = null) => ({
-  customerId: formData.customerId.trim(),
-  custId: formData.customerId.trim(),
-  customerName: formData.customerName.trim(),
+  customerId: toTrimmedString(formData.customerId),
+  custId: toTrimmedString(formData.customerId),
+  customerName: toTrimmedString(formData.customerName),
   customer: customer
     ? {
         id: customer.id,
@@ -440,15 +591,18 @@ const buildShirtMeasurementPayload = (formData, customer = null) => ({
         address: customer.address,
       }
     : undefined,
-  shirtMeasurements: { ...formData.shirtMeasurements },
+  shirtMeasurement: {
+    ...formData.shirtMeasurements,
+    notes: toTrimmedString(formData.notes),
+  },
   ...formData.shirtMeasurements,
-  notes: formData.notes.trim(),
+  measurementNotes: { shirt: toTrimmedString(formData.notes) },
 });
 
 const buildPantMeasurementPayload = (formData, customer = null) => ({
-  customerId: formData.customerId.trim(),
-  custId: formData.customerId.trim(),
-  customerName: formData.customerName.trim(),
+  customerId: toTrimmedString(formData.customerId),
+  custId: toTrimmedString(formData.customerId),
+  customerName: toTrimmedString(formData.customerName),
   customer: customer
     ? {
         id: customer.id,
@@ -457,20 +611,65 @@ const buildPantMeasurementPayload = (formData, customer = null) => ({
         address: customer.address,
       }
     : undefined,
-  pantMeasurements: { ...formData.pantMeasurements },
+  pantMeasurement: {
+    ...formData.pantMeasurements,
+    notes: toTrimmedString(formData.notes),
+  },
+  pantMeasuremet: {
+    ...formData.pantMeasurements,
+    notes: toTrimmedString(formData.notes),
+  },
   pantLength: formData.pantMeasurements.length,
   pantWaist: formData.pantMeasurements.waist,
+  length: formData.pantMeasurements.length,
+  waist: formData.pantMeasurements.waist,
   hip: formData.pantMeasurements.hip,
   thigh: formData.pantMeasurements.thigh,
   knee: formData.pantMeasurements.knee,
   calf: formData.pantMeasurements.calf,
   bottom: formData.pantMeasurements.bottom,
-  notes: formData.notes.trim(),
+  chainFly: formData.pantMeasurements.chainFly ?? '',
+  measurementNotes: { pant: toTrimmedString(formData.notes) },
+  ...formData.pantMeasurements,
 });
+
+const buildTypedMeasurementPayload = (type, formData, customer = null) => {
+  const values = { ...formData[type.formKey] };
+  const notes = toTrimmedString(formData.notes);
+  const backendMeasurement = {
+    ...values,
+    notes,
+  };
+  const response = {
+    customerId: toTrimmedString(formData.customerId),
+    custId: toTrimmedString(formData.customerId),
+    customerName: toTrimmedString(formData.customerName),
+    customer: customer
+      ? { id: customer.id, name: customer.name, mobileNumber: customer.mobileNumber, address: customer.address }
+      : undefined,
+    [measurementBackendKeys[type.formKey]]: backendMeasurement,
+    ...values,
+    measurementNotes: { [type.key]: notes },
+  };
+
+  if (type.formKey === 'pantMeasurements') {
+    response.pantMeasurement = backendMeasurement;
+    response.pantMeasuremet = backendMeasurement;
+    response.length = values.length ?? '';
+    response.waist = values.waist ?? '';
+    response.pantLength = values.length ?? '';
+    response.pantWaist = values.waist ?? '';
+  }
+
+  return response;
+};
 
 const hasMeasurementValues = (customer = {}) =>
   shirtFields.some((field) => customer.shirtMeasurements?.[field]) ||
-  pantFields.some((field) => customer.pantMeasurements?.[field]);
+  pantFields.some((field) => customer.pantMeasurements?.[field]) ||
+  jacketFields.some((field) => customer.jacketMeasurements?.[field]) ||
+  blazerFields.some((field) => customer.blazerMeasurements?.[field]) ||
+  sherwaniFields.some((field) => customer.sherwaniMeasurements?.[field]);
 
 const hasAnyValue = (values = {}) =>
   Object.values(values || {}).some((value) => value !== null && value !== undefined && String(value).trim() !== '');
@@ -501,6 +700,7 @@ const MeasurementPage = () => {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [measurementErrors, setMeasurementErrors] = useState({});
 
   const loadCustomers = async () => {
     setLoading(true);
@@ -554,7 +754,7 @@ const MeasurementPage = () => {
   );
 
   const fetchCustomerWithMeasurements = async (customerId) => {
-    let customer = null;
+    let customer;
 
     try {
       const customerResponse = await getCustomerById(customerId);
@@ -571,15 +771,14 @@ const MeasurementPage = () => {
       customer = list.find((item) => String(item.id) === String(customerId)) ?? null;
     }
 
-    if (!customer?.id && !customer?.name) {
-      customer = null;
-    }
-
     const lookupId = customer?.id || customerId;
 
-    const [shirtResult, pantResult, genericResult, allMeasurementsResult] = await Promise.allSettled([
+    const [shirtResult, pantResult, jacketResult, blazerResult, sherwaniResult, genericResult, allMeasurementsResult] = await Promise.allSettled([
       getShirtMeasurementById(lookupId),
       getPantMeasurementById(lookupId),
+      getJacketMeasurementById(lookupId),
+      getBlazerMeasurementById(lookupId),
+      getSherwaniMeasurementById(lookupId),
       getMeasurementById(lookupId),
       getMeasurements(),
     ]);
@@ -587,6 +786,9 @@ const MeasurementPage = () => {
     const genericData = readMeasurementObject(genericResult.status === 'fulfilled' ? genericResult.value?.data : {});
     const shirtData = readMeasurementObject(shirtResult.status === 'fulfilled' ? shirtResult.value?.data : {});
     const pantData = readMeasurementObject(pantResult.status === 'fulfilled' ? pantResult.value?.data : {});
+    const jacketData = readMeasurementObject(jacketResult.status === 'fulfilled' ? jacketResult.value?.data : {});
+    const blazerData = readMeasurementObject(blazerResult.status === 'fulfilled' ? blazerResult.value?.data : {});
+    const sherwaniData = readMeasurementObject(sherwaniResult.status === 'fulfilled' ? sherwaniResult.value?.data : {});
     const allMeasurements =
       allMeasurementsResult.status === 'fulfilled'
         ? extractMeasurementRecords(allMeasurementsResult.value?.data)
@@ -602,6 +804,9 @@ const MeasurementPage = () => {
 
     const customerShirt = coalesceMeasurementSource(customer?.shirtMeasurements, customer?.shirtMeasurement, customer?.measurements?.shirtMeasurements, customer?.measurements?.shirtMeasurement, customer?.measurement?.shirtMeasurements, customer?.measurement?.shirtMeasurement, genericData.shirtMeasurements, genericData.shirtMeasurement, shirtData.shirtMeasurements, shirtData.shirtMeasurement, listData.shirtMeasurements, listData.shirtMeasurement);
     const customerPant = coalesceMeasurementSource(customer?.pantMeasurements, customer?.pantMeasurement, customer?.measurements?.pantMeasurements, customer?.measurements?.pantMeasurement, customer?.measurement?.pantMeasurements, customer?.measurement?.pantMeasurement, genericData.pantMeasurements, genericData.pantMeasurement, pantData.pantMeasurements, pantData.pantMeasurement, listData.pantMeasurements, listData.pantMeasurement);
+    const customerJacket = coalesceMeasurementSource(customer?.jacketMeasurements, customer?.jacketMeasuremet, customer?.jacketMeasurement, customer?.measurements?.jacketMeasurements, customer?.measurements?.jacketMeasuremet, customer?.measurements?.jacketMeasurement, genericData.jacketMeasurements, genericData.jacketMeasuremet, genericData.jacketMeasurement, jacketData.jacketMeasurements, jacketData.jacketMeasuremet, jacketData.jacketMeasurement, listData.jacketMeasurements, listData.jacketMeasuremet, listData.jacketMeasurement);
+    const customerBlazer = coalesceMeasurementSource(customer?.blazerMeasurements, customer?.blazerMeasurement, genericData.blazerMeasurements, genericData.blazerMeasurement, blazerData.blazerMeasurements, blazerData.blazerMeasurement, listData.blazerMeasurements, listData.blazerMeasurement);
+    const customerSherwani = coalesceMeasurementSource(customer?.sherwaniMeasurements, customer?.sherwaniMeasurement, genericData.sherwaniMeasurements, genericData.sherwaniMeasurement, sherwaniData.sherwaniMeasurements, sherwaniData.sherwaniMeasurement, listData.sherwaniMeasurements, listData.sherwaniMeasurement);
 
     const unifiedShirt = {
       ...stripEmptyValues(listData),
@@ -615,10 +820,13 @@ const MeasurementPage = () => {
       ...stripEmptyValues(customerPant),
       ...stripEmptyValues(pantData),
     };
+    const unifiedJacket = { ...stripEmptyValues(customerJacket), ...stripEmptyValues(jacketData) };
+    const unifiedBlazer = { ...stripEmptyValues(customerBlazer), ...stripEmptyValues(blazerData) };
+    const unifiedSherwani = { ...stripEmptyValues(customerSherwani), ...stripEmptyValues(sherwaniData) };
 
     if (!customer) {
-      const derivedCustomerId = genericData.customerId ?? shirtData.customerId ?? pantData.customerId ?? listData.customerId ?? listData.custId ?? customerId;
-      const derivedCustomerName = genericData.customerName ?? shirtData.customerName ?? pantData.customerName ?? listData.customerName ?? listData.customer?.name ?? '';
+      const derivedCustomerId = genericData.customerId ?? shirtData.customerId ?? pantData.customerId ?? jacketData.customerId ?? blazerData.customerId ?? sherwaniData.customerId ?? listData.customerId ?? listData.custId ?? customerId;
+      const derivedCustomerName = genericData.customerName ?? shirtData.customerName ?? pantData.customerName ?? jacketData.customerName ?? blazerData.customerName ?? sherwaniData.customerName ?? listData.customerName ?? listData.customer?.name ?? '';
 
       customer = normalizeCustomer({
         id: derivedCustomerId,
@@ -633,7 +841,16 @@ const MeasurementPage = () => {
       customerName: customer.name || '',
       shirtMeasurements: normalizeShirtMeasurements(unifiedShirt),
       pantMeasurements: normalizePantMeasurements(unifiedPant),
-      notes: unifiedShirt.notes ?? unifiedPant.notes ?? listData.notes ?? genericData.notes ?? shirtData.notes ?? pantData.notes ?? '',
+      jacketMeasurements: normalizeMeasurementFields(unifiedJacket, jacketMeasurementFields, 'jacket'),
+      blazerMeasurements: normalizeMeasurementFields(unifiedBlazer, blazerMeasurementFields),
+      sherwaniMeasurements: normalizeMeasurementFields(unifiedSherwani, sherwaniMeasurementFields),
+      measurementNotes: {
+        shirt: getMeasurementNote(shirtData, 'shirt', true) || getMeasurementNote(genericData, 'shirt') || getMeasurementNote(listData, 'shirt'),
+        pant: getMeasurementNote(pantData, 'pant', true) || getMeasurementNote(genericData, 'pant') || getMeasurementNote(listData, 'pant'),
+        jacket: getMeasurementNote(jacketData, 'jacket', true) || getMeasurementNote(genericData, 'jacket') || getMeasurementNote(listData, 'jacket'),
+        blazer: getMeasurementNote(blazerData, 'blazer', true) || getMeasurementNote(genericData, 'blazer') || getMeasurementNote(listData, 'blazer'),
+        sherwani: getMeasurementNote(sherwaniData, 'sherwani', true) || getMeasurementNote(genericData, 'sherwani') || getMeasurementNote(listData, 'sherwani'),
+      },
     });
 
     measurement = {
@@ -646,13 +863,17 @@ const MeasurementPage = () => {
         measurement.pantMeasurements,
         normalizePantMeasurements(customer?.pantMeasurements ?? {}),
       ),
+      jacketMeasurements: mergeMissingMeasurementValues(measurement.jacketMeasurements, normalizeMeasurementFields(customer?.jacketMeasurements ?? {}, jacketMeasurementFields, 'jacket')),
+      blazerMeasurements: mergeMissingMeasurementValues(measurement.blazerMeasurements, normalizeMeasurementFields(customer?.blazerMeasurements ?? {}, blazerMeasurementFields)),
+      sherwaniMeasurements: mergeMissingMeasurementValues(measurement.sherwaniMeasurements, normalizeMeasurementFields(customer?.sherwaniMeasurements ?? {}, sherwaniMeasurementFields)),
     };
 
     const hasShirt = hasAnyValue(measurement.shirtMeasurements);
     const hasPant = hasAnyValue(measurement.pantMeasurements);
+    const hasOtherMeasurement = ['jacketMeasurements', 'blazerMeasurements', 'sherwaniMeasurements'].some((key) => hasAnyValue(measurement[key]));
     const hasCustomer = Boolean(customer?.id || customer?.name);
 
-    if (!hasCustomer && !hasShirt && !hasPant) {
+    if (!hasCustomer && !hasShirt && !hasPant && !hasOtherMeasurement) {
       throw new Error('No customer or measurement found for that ID.');
     }
 
@@ -661,6 +882,9 @@ const MeasurementPage = () => {
         ...customer,
         shirtMeasurements: coalesceMeasurementSource(customer.shirtMeasurements, customerShirt, unifiedShirt),
         pantMeasurements: coalesceMeasurementSource(customer.pantMeasurements, customerPant, unifiedPant),
+        jacketMeasurements: coalesceMeasurementSource(customer.jacketMeasurements, customerJacket, unifiedJacket),
+        blazerMeasurements: coalesceMeasurementSource(customer.blazerMeasurements, customerBlazer, unifiedBlazer),
+        sherwaniMeasurements: coalesceMeasurementSource(customer.sherwaniMeasurements, customerSherwani, unifiedSherwani),
       });
     }
 
@@ -708,7 +932,7 @@ const MeasurementPage = () => {
       setSelectedCustomer(customer);
       setSelectedMeasurement(measurement);
       setFeedback({ type: 'success', message: 'Measurement loaded successfully.' });
-      setActiveTab(3);
+      setActiveTab(2);
     } catch {
       setFeedback({
         type: 'error',
@@ -755,25 +979,18 @@ const MeasurementPage = () => {
 
   const handleFieldChange = (event) => {
     const { name, value } = event.target;
-
-    if (name.startsWith('shirtMeasurements.')) {
+    const measurementType = measurementTypes.find((type) => name.startsWith(`${type.formKey}.`));
+    if (measurementType) {
       const key = name.split('.')[1];
-      setFormData((prev) => ({
-        ...prev,
-        shirtMeasurements: {
-          ...prev.shirtMeasurements,
-          [key]: value,
-        },
+      const error = validateMeasurementValue(value);
+      setMeasurementErrors((previous) => ({
+        ...previous,
+        [name]: error,
       }));
-      return;
-    }
-
-    if (name.startsWith('pantMeasurements.')) {
-      const key = name.split('.')[1];
       setFormData((prev) => ({
         ...prev,
-        pantMeasurements: {
-          ...prev.pantMeasurements,
+        [measurementType.formKey]: {
+          ...prev[measurementType.formKey],
           [key]: value,
         },
       }));
@@ -786,22 +1003,47 @@ const MeasurementPage = () => {
     }));
   };
 
+  const handleMeasurementTypeChange = (_, value) => {
+    setActiveFormMeasurementTab(value);
+    setMeasurementErrors({});
+    setFormData((previous) => ({
+      ...buildEmptyForm(),
+      customerId: previous.customerId,
+      customerName: previous.customerName,
+    }));
+  };
+
   const beginNewMeasurement = () => {
     setFormData(buildEmptyForm());
+    setMeasurementErrors({});
     setActiveFormMeasurementTab(0);
     setSelectedCustomer(null);
     setSelectedMeasurement(null);
     setFeedback(null);
-    setActiveTab(2);
+    setActiveTab(1);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const customerId = formData.customerId.trim() || String(selectedCustomer?.id ?? '').trim();
+    const customerId = toTrimmedString(formData.customerId) || toTrimmedString(selectedCustomer?.id);
 
     if (!customerId) {
       setFeedback({ type: 'error', message: 'Customer ID is required.' });
+      return;
+    }
+
+    const selectedType = measurementTypes[activeFormMeasurementTab];
+    const validationErrors = selectedType.fields.reduce((errors, field) => {
+      const fieldName = `${selectedType.formKey}.${field.key}`;
+      const error = validateMeasurementValue(formData[selectedType.formKey][field.key]);
+      if (error) errors[fieldName] = error;
+      return errors;
+    }, {});
+
+    if (Object.keys(validationErrors).length > 0) {
+      setMeasurementErrors(validationErrors);
+      setFeedback({ type: 'error', message: 'Please enter valid measurement values from 0 to 99.99.' });
       return;
     }
 
@@ -826,19 +1068,30 @@ const MeasurementPage = () => {
         }
       }
 
-      const mergedPayload = buildMeasurementPayload(measurementFormData, customerForPayload);
-
-      if (activeFormMeasurementTab === 0) {
-        await createShirtMeasurement(buildShirtMeasurementPayload(measurementFormData, customerForPayload));
-      } else {
-        await createPantMeasurement(buildPantMeasurementPayload(measurementFormData, customerForPayload));
-      }
+      const selectedMeasurementValues = {
+        ...measurementFormData[selectedType.formKey],
+        notes: toTrimmedString(measurementFormData.notes),
+      };
+      const mergedPayload = {
+        ...buildMeasurementPayload(measurementFormData, customerForPayload),
+        [selectedType.formKey]: selectedMeasurementValues,
+        measurementNotes: {
+          ...(selectedMeasurement?.measurementNotes || {}),
+          [selectedType.key]: toTrimmedString(measurementFormData.notes),
+        },
+      };
+      const saveMeasurement = [
+        (data) => createShirtMeasurement(buildShirtMeasurementPayload(data, customerForPayload)),
+        (data) => createPantMeasurement(buildPantMeasurementPayload(data, customerForPayload)),
+        (data) => createJacketMeasurement(buildTypedMeasurementPayload(selectedType, data, customerForPayload)),
+        (data) => createBlazerMeasurement(buildTypedMeasurementPayload(selectedType, data, customerForPayload)),
+        (data) => createSherwaniMeasurement(buildTypedMeasurementPayload(selectedType, data, customerForPayload)),
+      ][activeFormMeasurementTab];
+      await saveMeasurement(mergedPayload);
 
       setFeedback({
         type: 'success',
-        message: activeFormMeasurementTab === 0
-          ? 'Shirt measurement saved successfully.'
-          : 'Pant measurement saved successfully.',
+        message: `${selectedType.label} saved successfully.`,
       });
 
       if (selectedCustomer?.id) {
@@ -849,6 +1102,9 @@ const MeasurementPage = () => {
             custAddress: selectedCustomer?.address || '',
             shirtMeasurements: mergedPayload.shirtMeasurements,
             pantMeasurements: mergedPayload.pantMeasurements,
+            jacketMeasurements: mergedPayload.jacketMeasurements,
+            blazerMeasurements: mergedPayload.blazerMeasurements,
+            sherwaniMeasurements: mergedPayload.sherwaniMeasurements,
           });
 
           const refreshedCustomerResponse = await getCustomerById(customerId);
@@ -883,18 +1139,33 @@ const MeasurementPage = () => {
             activeFormMeasurementTab === 1
               ? { ...measurementFormData.pantMeasurements }
               : base.pantMeasurements,
-          notes: measurementFormData.notes,
+          jacketMeasurements: activeFormMeasurementTab === 2 ? { ...measurementFormData.jacketMeasurements } : base.jacketMeasurements,
+          blazerMeasurements: activeFormMeasurementTab === 3 ? { ...measurementFormData.blazerMeasurements } : base.blazerMeasurements,
+          sherwaniMeasurements: activeFormMeasurementTab === 4 ? { ...measurementFormData.sherwaniMeasurements } : base.sherwaniMeasurements,
+          measurementNotes: {
+            ...(base.measurementNotes || {}),
+            [selectedType.key]: measurementFormData.notes,
+          },
         };
       });
     } catch (error) {
+      const responseData = error?.response?.data;
+      const serverMessage =
+        responseData?.message ||
+        responseData?.error ||
+        (typeof responseData === 'string' ? responseData : '') ||
+        error?.message;
       setFeedback({
         type: 'error',
-        message: error?.response?.data?.message || 'Unable to save measurement.',
+        message: serverMessage || 'Unable to save measurement.',
       });
     } finally {
       setSaving(false);
     }
   };
+
+  const activeViewType = measurementTypes[activeViewMeasurementTab] || measurementTypes[0];
+  const activeFormType = measurementTypes[activeFormMeasurementTab] || measurementTypes[0];
 
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: 3, width: '100%' }}>
@@ -904,13 +1175,10 @@ const MeasurementPage = () => {
             Measurements
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            View all customers, open a single customer by ID, and maintain one shirt and one pant measurement profile per customer.
+            View all customers,Maintain Shirt, Pant, Jacket, Blazer, Sherwani Measurement profile per customer.
           </Typography>
         </Box>
-       {/* <Button variant="contained" startIcon={<AddIcon />} onClick={beginNewMeasurement}>
-          New Customer Measurement
-        </Button> 
-        */}
+      
 
       </Stack>
 
@@ -926,23 +1194,10 @@ const MeasurementPage = () => {
           sx={{ minHeight: 44 }}
           tabs={[
             { label: 'All Customers' },
-            { label: 'Customer Details' },
             { label: 'Add Measurement' },
             { label: 'View Measurement' },
           ]}
         />
-      </Stack>
-
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3, maxWidth: 520 }}>
-        <TextField
-          size="small"
-          label="Customer ID"
-          value={lookupId}
-          onChange={(event) => setLookupId(event.target.value)}
-        />
-        <Button variant="outlined" startIcon={<SearchIcon />} onClick={loadCustomerById} disabled={lookupLoading}>
-          {lookupLoading ? 'Searching...' : 'Find Customer'}
-        </Button>
       </Stack>
 
       {feedback && (
@@ -998,23 +1253,10 @@ const MeasurementPage = () => {
                               setFormData(buildFormFromCustomer(customer));
                               setActiveFormMeasurementTab(0);
                               setFeedback(null);
-                              setActiveTab(2);
+                              setActiveTab(1);
                             }}
                           >
-                            Add Shirt
-                          </Button>
-                          <Button
-                            size="small"
-                            startIcon={<AddIcon />}
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setFormData(buildFormFromCustomer(customer));
-                              setActiveFormMeasurementTab(1);
-                              setFeedback(null);
-                              setActiveTab(2);
-                            }}
-                          >
-                            Add Pant
+                            Add Measurement
                           </Button>
                         </Stack>
                       </TableCell>
@@ -1028,130 +1270,12 @@ const MeasurementPage = () => {
       )}
 
       {activeTab === 1 && (
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={5}>
-            <Paper sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Customer Summary
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Search a customer by ID to review their profile and saved measurements.
-              </Typography>
-
-              {!selectedCustomer ? (
-                <Typography color="text.secondary">Load a customer from the search box or the table.</Typography>
-              ) : (
-                <Stack spacing={1.2}>
-                  <Typography><strong>ID:</strong> {selectedCustomer.id}</Typography>
-                  <Typography><strong>Name:</strong> {selectedCustomer.name}</Typography>
-                  <Typography><strong>Mobile:</strong> {selectedCustomer.mobileNumber}</Typography>
-                  <Typography><strong>Address:</strong> {selectedCustomer.address}</Typography>
-                  <Typography><strong>Measurement status:</strong> {hasMeasurementValues(selectedMeasurementView || selectedCustomer) ? 'Saved' : 'Not added yet'}</Typography>
-                  <Typography><strong>Measurement notes:</strong> {selectedMeasurementView?.notes || 'No notes added'}</Typography>
-                </Stack>
-              )}
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12} md={7}>
-            <Paper sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Measurement Preview
-              </Typography>
-
-              <Stack sx={{ mb: 2 }}>
-                <PageTabs
-                  value={activeViewMeasurementTab}
-                  onChange={(_, value) => setActiveViewMeasurementTab(value)}
-                  sx={{ minHeight: 40 }}
-                  tabs={[
-                    { label: 'Shirt Measurement' },
-                    { label: 'Pant Measurement' },
-                  ]}
-                />
-              </Stack>
-
-              {!selectedMeasurementView ? (
-                <Typography color="text.secondary">No measurement selected.</Typography>
-              ) : (
-                <Stack spacing={3}>
-                  <Card variant="outlined">
-                    <CardContent>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-                        Customer ID: {selectedMeasurementView.customerId || selectedCustomer?.id || '-'}
-                      </Typography>
-
-                      {activeViewMeasurementTab === 0 ? (
-                        <>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                            Shirt Measurements
-                          </Typography>
-                          <Grid container spacing={1.5}>
-                            {shirtMeasurementFields.map((field) => (
-                              <Grid item xs={6} sm={4} key={field.key}>
-                                <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: 'grey.50' }}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {field.marathi}
-                                  </Typography>
-                                  <Typography variant="caption" display="block" color="text.secondary">
-                                    {field.english}
-                                  </Typography>
-                                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                    {formatMeasurementDisplay(selectedMeasurementView.shirtMeasurements?.[field.key])}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-                            ))}
-                          </Grid>
-                        </>
-                      ) : (
-                        <>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                            Pant Measurements
-                          </Typography>
-                          <Grid container spacing={1.5}>
-                            {pantMeasurementFields.map((field) => (
-                              <Grid item xs={6} sm={4} key={field.key}>
-                                <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: 'grey.50' }}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {field.marathi}
-                                  </Typography>
-                                  <Typography variant="caption" display="block" color="text.secondary">
-                                    {field.english}
-                                  </Typography>
-                                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                    {formatMeasurementDisplay(selectedMeasurementView.pantMeasurements?.[field.key])}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-                            ))}
-                          </Grid>
-                        </>
-                      )}
-
-                      <Divider sx={{ my: 2 }} />
-                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        Notes
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>
-                        {selectedMeasurementView?.notes || 'No notes added for this measurement profile.'}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Stack>
-              )}
-            </Paper>
-          </Grid>
-        </Grid>
-      )}
-
-      {activeTab === 2 && (
         <Paper sx={{ p: 3 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2} sx={{ mb: 2 }}>
             <Box>
               <Typography variant="h6">Add Measurement Profile</Typography>
               <Typography variant="body2" color="text.secondary">
-                Add shirt and pant measurements separately using the tabs below.
+                Add each measurement profile separately using the tabs below.
               </Typography>
             </Box>
             <Button variant="outlined" onClick={beginNewMeasurement}>
@@ -1162,11 +1286,10 @@ const MeasurementPage = () => {
           <Stack sx={{ mb: 2 }}>
             <PageTabs
               value={activeFormMeasurementTab}
-              onChange={(_, value) => setActiveFormMeasurementTab(value)}
+              onChange={handleMeasurementTypeChange}
               sx={{ minHeight: 40 }}
               tabs={[
-                { label: 'Shirt Measurement Form' },
-                { label: 'Pant Measurement Form' },
+                ...measurementTypes.map((type) => ({ label: `${type.label} Form` })),
               ]}
             />
           </Stack>
@@ -1210,38 +1333,28 @@ const MeasurementPage = () => {
 
               <Divider />
 
-              {activeFormMeasurementTab === 0 ? (
-                <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                    Shirt Measurements
-                  </Typography>
-                  <Grid container spacing={2}>
-                    {shirtMeasurementFields.map((field) => (
-                      <Grid item xs={12} sm={6} md={4} key={field.key}>
-                        <TextField
-                          label={getMeasurementFieldLabel(field)}
-                          name={`shirtMeasurements.${field.key}`}
-                          value={formData.shirtMeasurements[field.key]}
-                          onChange={handleFieldChange}
-                          fullWidth
-                        />
-                      </Grid>
-                    ))}
-                  </Grid>
-                </Box>
+              {activeFormType.key === 'jacket' ? (
+                <JacketMeasurement
+                  formData={formData}
+                  measurementErrors={measurementErrors}
+                  onFieldChange={handleFieldChange}
+                />
               ) : (
                 <Box>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                    Pant Measurements
+                    {activeFormType.label}s
                   </Typography>
                   <Grid container spacing={2}>
-                    {pantMeasurementFields.map((field) => (
+                    {activeFormType.fields.map((field) => (
                       <Grid item xs={12} sm={6} md={4} key={field.key}>
                         <TextField
                           label={getMeasurementFieldLabel(field)}
-                          name={`pantMeasurements.${field.key}`}
-                          value={formData.pantMeasurements[field.key]}
+                          name={`${activeFormType.formKey}.${field.key}`}
+                          value={formData[activeFormType.formKey][field.key]}
                           onChange={handleFieldChange}
+                          error={Boolean(measurementErrors[`${activeFormType.formKey}.${field.key}`])}
+                          helperText={measurementErrors[`${activeFormType.formKey}.${field.key}`]}
+                          inputProps={{ inputMode: 'decimal' }}
                           fullWidth
                         />
                       </Grid>
@@ -1264,9 +1377,7 @@ const MeasurementPage = () => {
                 <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={saving}>
                   {saving
                     ? 'Saving...'
-                    : activeFormMeasurementTab === 0
-                      ? 'Save Shirt Measurement'
-                      : 'Save Pant Measurement'}
+                    : `Save ${activeFormType.label}`}
                 </Button>
                 <Button variant="outlined" onClick={() => setActiveTab(0)}>
                   Back to customers
@@ -1277,7 +1388,7 @@ const MeasurementPage = () => {
         </Paper>
       )}
 
-      {activeTab === 3 && (
+      {activeTab === 2 && (
         <Paper sx={{ p: 3 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3, maxWidth: 560 }}>
             <TextField
@@ -1315,8 +1426,7 @@ const MeasurementPage = () => {
                   onChange={(_, value) => setActiveViewMeasurementTab(value)}
                   sx={{ minHeight: 40 }}
                   tabs={[
-                    { label: 'Shirt Measurement' },
-                    { label: 'Pant Measurement' },
+                    ...measurementTypes.map((type) => ({ label: type.label })),
                   ]}
                 />
               </Stack>
@@ -1324,23 +1434,18 @@ const MeasurementPage = () => {
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-                    {activeViewMeasurementTab === 0 ? 'Shirt Measurement Card' : 'Pant Measurement Card'}
+                    {activeViewType.label} Card
                   </Typography>
 
                   <Grid container spacing={1.5}>
-                    {(activeViewMeasurementTab === 0 ? shirtMeasurementFields : pantMeasurementFields).map((field) => (
+                    {activeViewType.fields.map((field) => (
                       <Grid item xs={6} sm={4} key={field.key}>
                         <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: 'grey.50' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            {field.marathi}
-                          </Typography>
-                          <Typography variant="caption" display="block" color="text.secondary">
-                            {field.english}
+                              <Typography variant="caption" color="text.secondary">
+                                {field.marathi} / {field.english}
                           </Typography>
                           <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                            {activeViewMeasurementTab === 0
-                              ? formatMeasurementDisplay(selectedMeasurementView?.shirtMeasurements?.[field.key])
-                              : formatMeasurementDisplay(selectedMeasurementView?.pantMeasurements?.[field.key])}
+                            {formatMeasurementDisplay(selectedMeasurementView?.[activeViewType.formKey]?.[field.key])}
                           </Typography>
                         </Box>
                       </Grid>

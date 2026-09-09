@@ -41,7 +41,7 @@ const menuItems = [
     path: "/measurements"
   },
   {
-    text: "Orders",
+    text: "Purchase Order",
     icon: <ShoppingCartIcon />,
     path: "/orders"
   },
