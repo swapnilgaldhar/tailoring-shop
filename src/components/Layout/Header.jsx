@@ -23,7 +23,7 @@ const Header = ({ handleDrawerToggle }) => {
     <AppBar
       position="static"
       sx={{
-        backgroundColor: "#1976d2",
+        backgroundColor: "#980170", /*980170   1976d2 */
         width: "100%",
         zIndex: 1,
         padding: "10px 0",
@@ -60,8 +60,8 @@ const Header = ({ handleDrawerToggle }) => {
             fontWeight: 600,
             borderRadius: 2,
             px: 2,
-            bgcolor: "rgba(255,255,255,0.12)",
-            "&:hover": { bgcolor: "rgba(255,255,255,0.22)" },
+            bgcolor: "rgba(253, 254, 251, 0.96)",
+            "&:hover": { bgcolor: "rgba(251, 248, 248, 0.94)" },
           }}
         >
           Logout
