@@ -15,3 +15,32 @@ textarea,
 select {
   font-family: Inter, "Noto Sans Devanagari", sans-serif;
 }
+
+.MuiButton-contained {
+  background: #980170 !important;
+  color: #fff !important;
+}
+
+.MuiButton-contained:hover {
+  background: #980170 !important;
+}
+
+.MuiButton-outlined {
+  background: transparent !important;
+  border-color: #980170 !important;
+  color: #980170 !important;
+}
+
+.MuiButton-outlined:hover {
+  background: rgba(152, 1, 112, 0.08) !important;
+  border-color: #980170 !important;
+}
+
+.MuiButton-text {
+  color: #980170 !important;
+}
+
+.MuiButton-text:hover {
+  background: rgba(152, 1, 112, 0.08) !important;
+  color: #980170 !important;
+}

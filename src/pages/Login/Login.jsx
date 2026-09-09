@@ -84,7 +84,7 @@ const Login = () => {
           justifyContent: 'center',
           alignItems: 'center',
           width: '45%',
-          background: 'linear-gradient(145deg, #1565c0 0%, #1976d2 50%, #42a5f5 100%)',
+          background: 'linear-gradient(145deg, #980170 0%, #a51b80 50%, #bc419b 100%)',
           color: 'white',
           px: 6,
           gap: 3,
@@ -209,7 +209,7 @@ const Login = () => {
                 fontSize: 16,
                 borderRadius: 2,
                 textTransform: 'none',
-                background: 'linear-gradient(90deg, #1565c0 0%, #1976d2 100%)',
+                background: 'linear-gradient(90deg, #980170 0%, #980170 100%)',
                 boxShadow: '0 4px 14px rgba(25,118,210,0.35)',
                 '&:hover': { background: 'linear-gradient(90deg, #0d47a1 0%, #1565c0 100%)' },
               }}
