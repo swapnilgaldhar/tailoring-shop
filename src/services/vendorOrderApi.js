@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { apiUrl } from './apiConfig';
 
-const ORDER_API_BASE = '/api/order';
+const ORDER_API_BASE = apiUrl('/api/order');
 
 const vendorOrderApi = {
   getAllVendorOrders: async () => {
