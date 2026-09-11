@@ -1,21 +1,8 @@
 import axios from 'axios';
-
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091/api/customer';
-const trimmedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
-const API_BASE_URL = trimmedApiBaseUrl.includes('/api/customer')
-  ? trimmedApiBaseUrl
-  : `${trimmedApiBaseUrl}/api/customer`;
-
-const toCustomerApiBase = (baseUrl) => {
-  const cleanBase = (baseUrl || '').replace(/\/+$/, '');
-  if (!cleanBase) return '/api/customer';
-  return cleanBase.includes('/api/customer') ? cleanBase : `${cleanBase}/api/customer`;
-};
+import { API_BASE_URL } from './apiConfig';
 
 const candidateBaseUrls = [
-  toCustomerApiBase(trimmedApiBaseUrl),
-  'http://localhost:8091/api/customer',
-  '/api/customer',
+  API_BASE_URL,
 ].filter((value, index, array) => value && array.indexOf(value) === index);
 
 const customerApis = candidateBaseUrls.map((baseURL) =>
@@ -76,4 +63,3 @@ export const createMeasurement = (measurement) => requestCustomerApis('post', ['
 export const updateMeasurement = (id, measurement) => requestCustomerApis('put', [`/updatemeasurement/${id}`, `/measurement/${id}`, `/measurements/${id}`], measurement);
 export const deleteMeasurement = (id) => requestCustomerApis('delete', [`/deletemeasurement/${id}`, `/measurement/${id}`, `/measurements/${id}`]);
 
-export { API_BASE_URL };

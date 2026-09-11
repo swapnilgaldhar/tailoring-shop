@@ -1,13 +1,11 @@
 import axios from 'axios';
+import { API_ROOT_URL } from './apiConfig';
 
 
 
 
 
-const customerApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091';
-const rawMeasurementApiBaseUrl =
-  import.meta.env.VITE_MEASUREMENT_API_BASE_URL ||
-  customerApiBaseUrl.replace('/api/customer', '');
+const rawMeasurementApiBaseUrl = import.meta.env.VITE_MEASUREMENT_API_BASE_URL || API_ROOT_URL;
 const measurementApiBaseUrl = rawMeasurementApiBaseUrl.replace(/\/+$/, '');
 
 const toHostRoot = (baseUrl) => {
@@ -19,9 +17,6 @@ const toHostRoot = (baseUrl) => {
 const measurementBaseCandidates = [
   measurementApiBaseUrl,
   toHostRoot(measurementApiBaseUrl),
-  toHostRoot(customerApiBaseUrl),
-  'http://localhost:8091',
-  '/api',
 ].filter((value, index, array) => value && array.indexOf(value) === index);
 
 const measurementApis = measurementBaseCandidates.map((baseURL) =>

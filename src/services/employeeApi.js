@@ -1,9 +1,8 @@
 import axios from 'axios';
+import { API_ROOT_URL } from './apiConfig';
 
-const customerApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091';
-const defaultRootBaseUrl = customerApiBaseUrl.replace('/api/customer', '');
-const rawEmployeeApiBaseUrl = import.meta.env.VITE_EMPLOYEE_API_BASE_URL || defaultRootBaseUrl;
-const trimmedEmployeeApiBaseUrl = rawEmployeeApiBaseUrl.replace(/\/+$/, '');
+const rawEmployeeApiBaseUrl = import.meta.env.VITE_EMPLOYEE_API_BASE_URL || API_ROOT_URL;
+const trimmedEmployeeApiBaseUrl = rawEmployeeApiBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
 
 const toApiBase = (baseUrl) => {
   const cleanBase = (baseUrl || '').replace(/\/+$/, '');
@@ -13,8 +12,6 @@ const toApiBase = (baseUrl) => {
 
 const candidateBaseUrls = [
   toApiBase(trimmedEmployeeApiBaseUrl),
-  'http://localhost:8091/api',
-  '/api',
 ].filter((value, index, array) => value && array.indexOf(value) === index);
 
 const employeeApis = candidateBaseUrls.map((baseURL) =>

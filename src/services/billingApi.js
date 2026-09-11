@@ -1,9 +1,8 @@
 import axios from 'axios';
+import { API_ROOT_URL } from './apiConfig';
 
-const customerApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091';
-const defaultRootBaseUrl = String(customerApiBaseUrl).replace('/api/customer', '');
-const rawBillingApiBaseUrl = import.meta.env.VITE_BILLING_API_BASE_URL || defaultRootBaseUrl;
-const trimmedBillingApiBaseUrl = rawBillingApiBaseUrl.replace(/\/+$/, '');
+const rawBillingApiBaseUrl = import.meta.env.VITE_BILLING_API_BASE_URL || API_ROOT_URL;
+const trimmedBillingApiBaseUrl = rawBillingApiBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
 
 const toApiBase = (baseUrl) => {
   const cleanBase = (baseUrl || '').replace(/\/+$/, '');
@@ -13,9 +12,6 @@ const toApiBase = (baseUrl) => {
 
 const candidateBaseUrls = [
   toApiBase(trimmedBillingApiBaseUrl),
-  'http://localhost:8091/api',
-  'http://localhost:8091',
-  '/api',
 ].filter((value, index, array) => value && array.indexOf(value) === index);
 
 const billingApis = candidateBaseUrls.map((baseURL) =>
