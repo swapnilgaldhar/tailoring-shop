@@ -55,7 +55,8 @@ const Login = () => {
       const isLoginSuccessful =
         message.toLowerCase().includes('login successful')
         || payload?.success === true
-        || payload?.status === 'success';
+        || payload?.status?.toLowerCase?.() === 'success'
+        || Boolean(payload?.id && (payload?.username || payload?.mobileNumber));
 
       if (!isLoginSuccessful) {
         throw new Error(message || 'Login failed. Please try again.');
