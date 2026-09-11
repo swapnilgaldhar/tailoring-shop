@@ -1,6 +1,7 @@
 import axios from "axios";
+import { API_ROOT_URL } from './apiConfig';
 
-const rawBaseUrl = import.meta.env.VITE_STITCHING_API_BASE_URL || "";
+const rawBaseUrl = import.meta.env.VITE_STITCHING_API_BASE_URL || API_ROOT_URL;
 const baseUrl = rawBaseUrl.replace(/\/+$/, "");
 
 const stitchingOrderApi = axios.create({

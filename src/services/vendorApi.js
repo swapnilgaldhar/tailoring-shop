@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { apiUrl } from './apiConfig';
 
-const VENDER_BASE_URL = '/api/vender';
+const VENDER_BASE_URL = apiUrl('/api/vender');
 
 const vendorApi = {
   getAllVendors: async () => {

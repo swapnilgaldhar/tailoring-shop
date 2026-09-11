@@ -15,6 +15,7 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import { apiUrl } from '../../services/apiConfig';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8091/api/auth/login', {
+      const response = await axios.post(apiUrl('/api/auth/login'), {
         mobileNumber: username,
         password,
       }, {
