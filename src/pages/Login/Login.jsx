@@ -32,7 +32,9 @@ const Login = () => {
 
     try {
       const response = await axios.post(apiUrl('/api/auth/login'), {
-        mobileNumber: username,
+        username: username.trim(),
+        userId: username.trim(),
+        mobileNumber: username.trim(),
         password,
       }, {
         headers: {
@@ -156,7 +158,7 @@ const Login = () => {
             <TextField
               required
               fullWidth
-              label="Username"
+              label="User ID"
               autoComplete="username"
               autoFocus
               value={username}
