@@ -68,10 +68,11 @@ const Login = () => {
         throw new Error(message || 'Login failed. Please try again.');
       }
 
-      const token = payload?.token || payload?.data?.token || 'dummy-token';
+      const token = payload?.token || payload?.username || payload?.data?.token || 'dummy-token';
       localStorage.setItem('authToken', token);
       localStorage.setItem('authExpiry', String(Date.now() + 15 * 60 * 1000));
-      localStorage.setItem('user', JSON.stringify({ username, ...(payload?.user ?? payload?.data ?? {}) }));
+      {/*localStorage.setItem('user', JSON.stringify({ username, ...(payload?.user ?? payload?.data ?? {}) }));*/}
+      localStorage.setItem('user', JSON.stringify({ ...payload }));
       navigate('/dashboard', { replace: true });
     } catch (loginError) {
       const backendMessage = loginError?.response?.data?.message
