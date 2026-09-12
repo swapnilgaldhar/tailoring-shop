@@ -26,7 +26,13 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+     console.log("🔥 HANDLE LOGIN CALLED");
+
+  e.preventDefault();
+
+  console.log("🔥 Username:", username);
+  console.log("🔥 Password entered:", password ? "YES" : "NO");
+  console.log("🔥 API URL:", apiUrl('/api/auth/login'));
     setError('');
     setLoading(true);
 
