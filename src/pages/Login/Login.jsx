@@ -16,7 +16,11 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091';
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_ROOT_URL
+  || (configuredApiBaseUrl.startsWith('http')
+    ? configuredApiBaseUrl.replace(/\/api\/customer\/?$/, '')
+    : 'http://localhost:8091');
 
 const Login = () => {
   const navigate = useNavigate();
@@ -27,13 +31,9 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
-     console.log("🔥 HANDLE LOGIN CALLED");
-
-  e.preventDefault();
-
-  console.log("🔥 Username:", username);
-  console.log("🔥 Password entered:", password ? "YES" : "NO");
-  console.log("🔥 API URL:", `${API_BASE_URL}/api/auth/login`);
+    e.preventDefault();
+    console.info('Login submit started');
+    console.info('Login API URL:', `${API_BASE_URL}/api/auth/login`);
     setError('');
     setLoading(true);
 
@@ -76,6 +76,7 @@ const Login = () => {
       localStorage.setItem('user', JSON.stringify({ ...payload }));
       navigate('/dashboard', { replace: true });
     } catch (loginError) {
+      console.error('Login request failed:', loginError);
       const backendMessage = loginError?.response?.data?.message
         || loginError?.response?.data?.error
         || loginError?.message
