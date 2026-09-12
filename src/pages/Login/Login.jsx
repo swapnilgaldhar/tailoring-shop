@@ -15,7 +15,8 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import { apiUrl } from '../../services/apiConfig';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -32,12 +33,12 @@ const Login = () => {
 
   console.log("🔥 Username:", username);
   console.log("🔥 Password entered:", password ? "YES" : "NO");
-  console.log("🔥 API URL:", apiUrl('/api/auth/login'));
+  console.log("🔥 API URL:", `${API_BASE_URL}/api/auth/login`);
     setError('');
     setLoading(true);
 
     try {
-      const response = await axios.post(apiUrl('/api/auth/login'), {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
         username: username.trim(),
         userId: username.trim(),
         mobileNumber: username.trim(),
