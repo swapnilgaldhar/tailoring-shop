@@ -1,17 +1,19 @@
-const configuredCustomerUrl = import.meta.env.VITE_API_BASE_URL || '';
-const configuredRootUrl = import.meta.env.VITE_API_ROOT_URL || '';
-const defaultApiRootUrl = 'https://tailoring-shop-backend-production.up.railway.app';
+const configuredCustomerUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8091/api/customer';
 
 export const API_ROOT_URL = (
-  configuredRootUrl
+  import.meta.env.VITE_API_ROOT_URL
   || configuredCustomerUrl.replace(/\/api\/customer\/?$/, '')
-  || defaultApiRootUrl
 ).replace(/\/+$/, '');
 
 export const API_BASE_URL = (
-  /^https?:\/\//.test(configuredCustomerUrl)
-    ? configuredCustomerUrl
-    : `${API_ROOT_URL}/api/customer`
+  import.meta.env.VITE_API_BASE_URL
+  || `${API_ROOT_URL}/api/customer`
 ).replace(/\/+$/, '');
 
-export const apiUrl = (path) => `${API_ROOT_URL}/${String(path).replace(/^\/+/, '')}`;
+export const apiUrl = (path) => {
+  // For auth routes, always use API_ROOT_URL
+  if (String(path).includes('/auth')) {
+    return `${API_ROOT_URL}${String(path).startsWith('/') ? '' : '/'}${String(path)}`;
+  }
+  return `${API_ROOT_URL}/${String(path).replace(/^\/+/, '')}`;
+};
