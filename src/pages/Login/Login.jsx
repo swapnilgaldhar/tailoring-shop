@@ -29,6 +29,16 @@ const Login = () => {
     e.preventDefault();
     console.info('Login submit started');
     console.info('Login API URL:', `${API_ROOT_URL}/api/auth/login`);
+     console.log('========== LOGIN DEBUG START ==========');
+  console.log('1. Form submitted');
+  console.log('2. Username:', username);
+  console.log('3. Password entered:', password ? 'YES' : 'NO');
+  console.log('4. API_ROOT_URL:', API_ROOT_URL);
+  console.log(
+    '5. Login URL:',
+    `${API_ROOT_URL}/api/auth/login`
+  );
+
     setError('');
     setLoading(true);
 
@@ -43,6 +53,10 @@ const Login = () => {
         timeout: 15000,
       });
 
+          console.log('8. Backend response received');
+    console.log('9. Status:', response.status);
+    console.log('10. Response:', response.data);
+
       const payload = response?.data ?? {};
       const message = String(
         payload?.message
@@ -53,13 +67,13 @@ const Login = () => {
       );
 
       const isLoginSuccessful =
-        message.toLowerCase().includes('login successful')
+        message.toLowerCase().includes('Login Successful'.toLowerCase())
         || payload?.success === true
         || payload?.status?.toLowerCase?.() === 'success'
         || Boolean(payload?.id && (payload?.username || payload?.mobileNumber));
 
       if (!isLoginSuccessful) {
-        throw new Error(message || 'Login failed. Please try again.');
+        throw new Error(message || 'Login failed.--- Please try again.');
       }
 
       const token = payload?.token || payload?.username || payload?.data?.token || 'dummy-token';
