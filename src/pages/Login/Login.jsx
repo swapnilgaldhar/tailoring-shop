@@ -15,12 +15,7 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
-
-const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-const API_BASE_URL = import.meta.env.VITE_API_ROOT_URL
-  || (configuredApiBaseUrl.startsWith('http')
-    ? configuredApiBaseUrl.replace(/\/api\/customer\/?$/, '')
-    : 'http://localhost:8091');
+import { API_ROOT_URL } from '../../services/apiConfig';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -38,10 +33,8 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-        username: username.trim(),
-        userId: username.trim(),
-        mobileNumber: username.trim(),
+      const response = await axios.post(`${API_ROOT_URL}/api/auth/login`, {
+        mobileNumber: Number(username.trim()),
         password,
       }, {
         headers: {
