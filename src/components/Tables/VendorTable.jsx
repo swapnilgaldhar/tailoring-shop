@@ -75,7 +75,7 @@ const VendorTable = ({ mode = 'all', onCreateOrderForVendor }) => {
       }
     } catch (err) {
       console.error('Error loading vendors:', err);
-      setError('Failed to load vendors. Check backend is running and CORS is enabled for http://localhost:5173');
+      setError('Failed to load vendors. Check the Railway backend and CORS configuration.');
       setVendors([]);
     } finally {
       setLoading(false);

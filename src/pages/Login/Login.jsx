@@ -28,7 +28,7 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     console.info('Login submit started');
-    console.info('Login API URL:', `${API_BASE_URL}/api/auth/login`);
+    console.info('Login API URL:', `${API_ROOT_URL}/api/auth/login`);
     setError('');
     setLoading(true);
 

@@ -1,14 +1,9 @@
-const DEFAULT_PRODUCTION_API_ROOT_URL = 'https://tailoring-shop-backend-production.up.railway.app';
-const configuredCustomerUrl = import.meta.env.VITE_API_BASE_URL || '';
-const configuredRootUrl = import.meta.env.VITE_API_ROOT_URL || (
-  configuredCustomerUrl.startsWith('http')
-    ? configuredCustomerUrl.replace(/\/api\/customer\/?$/, '')
-    : ''
-);
+const configuredCustomerUrl = import.meta.env.VITE_API_BASE_URL
+  || 'https://tailoring-shop-backend-production.up.railway.app/api/customer';
 
 export const API_ROOT_URL = (
-  configuredRootUrl
-  || (import.meta.env.PROD ? DEFAULT_PRODUCTION_API_ROOT_URL : 'http://localhost:8091')
+  import.meta.env.VITE_API_ROOT_URL
+  || configuredCustomerUrl.replace(/\/api\/customer\/?$/, '')
 ).replace(/\/+$/, '');
 
 export const API_BASE_URL = (
