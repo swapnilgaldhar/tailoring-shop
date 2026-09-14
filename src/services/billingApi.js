@@ -11,6 +11,7 @@ const toApiBase = (baseUrl) => {
 };
 
 const candidateBaseUrls = [
+  trimmedBillingApiBaseUrl,
   toApiBase(trimmedBillingApiBaseUrl),
 ].filter((value, index, array) => value && array.indexOf(value) === index);
 

@@ -288,7 +288,7 @@ const Dashboard = () => {
               fontWeight: 500,
             }}
           >
-            Good Day, Tailor.
+            Good Day, Master.
           </Typography>
         </Box>
 
