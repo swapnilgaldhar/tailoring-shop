@@ -874,11 +874,29 @@ const Billing = () => {
   const handleGenerateBill = async () => {
     if (!validateBillBeforeSave()) return;
 
+    const payload = buildBillPayload();
+    setGeneratedBill({
+      ...payload,
+      billNumber: 'Pending',
+      customerName: customer?.name,
+      customerId: customer?.id,
+      mobileNumber: customer?.mobileNumber,
+      address: customer?.address,
+      customerDetails: customer,
+    });
+    setGeneratedCustomer(customer);
     setSaving(true);
     try {
-      const { payload, billNumber } = await saveBillToDb();
-      setGeneratedBill({ ...payload, billNumber, customer: customer?.name });
-      setGeneratedCustomer(customer);
+      const { payload: savedPayload, billNumber } = await saveBillToDb();
+      setGeneratedBill({
+        ...savedPayload,
+        billNumber: billNumber || 'Generated',
+        customerName: customer?.name,
+        customerId: customer?.id,
+        mobileNumber: customer?.mobileNumber,
+        address: customer?.address,
+        customerDetails: customer,
+      });
       setCustomer(null);
       setCustomerLookupId('');
       setIsEditingCustomer(true);
@@ -886,6 +904,8 @@ const Billing = () => {
       setItems([createEmptyItem()]);
       setFeedback({ type: 'success', message: 'Bill saved successfully.' });
     } catch (error) {
+      setGeneratedBill(null);
+      setGeneratedCustomer(null);
       setFeedback({
         type: 'error',
         message: error?.response?.data?.message || error?.message || 'Unable to save bill.',
@@ -1424,19 +1444,19 @@ const Billing = () => {
       </>
       )}
 
-      <Dialog open={Boolean(generatedBill)} onClose={() => setGeneratedBill(null)} fullWidth maxWidth="md">
-        <DialogTitle>Generated Bill</DialogTitle>
+      <Dialog open={Boolean(generatedBill)} onClose={() => !saving && setGeneratedBill(null)} fullWidth maxWidth="md">
+        <DialogTitle>{saving ? 'Bill Preview' : 'Generated Bill'}</DialogTitle>
         <DialogContent dividers>
           {generatedBill && <BillDetailsCard bill={generatedBill} onPrint={handlePrintBill} />}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handlePrintBill} startIcon={<PrintIcon />} variant="outlined">
+          <Button onClick={handlePrintBill} startIcon={<PrintIcon />} variant="outlined" disabled={saving}>
             Print Bill
           </Button>
           <Button onClick={handleShareOnWhatsApp} startIcon={<WhatsAppIcon />} variant="contained" color="success" disabled={saving}>
             Share on WhatsApp
           </Button>
-          <Button onClick={() => setGeneratedBill(null)}>Close</Button>
+          <Button onClick={() => setGeneratedBill(null)} disabled={saving}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

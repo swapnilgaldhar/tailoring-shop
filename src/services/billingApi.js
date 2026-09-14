@@ -11,6 +11,7 @@ const toApiBase = (baseUrl) => {
 };
 
 const candidateBaseUrls = [
+  API_ROOT_URL,
   trimmedBillingApiBaseUrl,
   toApiBase(trimmedBillingApiBaseUrl),
 ].filter((value, index, array) => value && array.indexOf(value) === index);
@@ -48,7 +49,7 @@ const requestWithFallback = async (method, paths, data) => {
   throw lastError;
 };
 
-export const createBill = (payload) => requestWithFallback('post', '/billing/createbill', payload);
+export const createBill = (payload) => requestWithFallback('post', ['/billing/createbill', '/api/billing/createbill'], payload);
 
 export const getBills = () =>
   requestWithFallback('get', [
